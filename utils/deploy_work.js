@@ -156,7 +156,8 @@ const runDeploy = (data) => {
     if (isMainThread) {
         // console.log('打印1=>', data._doc)
         const worker = new Worker(__filename, {
-            workerData: JSON.parse(JSON.stringify(data._doc))
+            // workerData: JSON.parse(JSON.stringify(data._doc))
+            workerData: data
         });
         worker.on('message', (d) => {
             console.log('parent receive message:', d);

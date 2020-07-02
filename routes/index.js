@@ -76,6 +76,8 @@ router.post('/deploy', function(req, res, next) {
         try {
           console.log('项目信息=>', data)
           // deploy(data)
+          data = data.toObject()
+          data._id = data._id.toString()
           runDeploy(data)
         } catch (e) {
           console.log(e)
@@ -127,7 +129,9 @@ router.get('/deploy', function(req, res, next) {
         res.send({code: 0, msg: '启动部署'})
         try {
           console.log('项目=>', data)
-          runDeploy({ ...data })
+          data = data.toObject()
+          data._id = data._id.toString()
+          runDeploy(data)
         } catch (e) {
           console.log(e)
         }
