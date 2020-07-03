@@ -218,7 +218,7 @@ router.get('/record_list', function(req, res, next) {
       }
       res.send({code:0,data:data})
     }
-  }).sort({createAt: -1}).limit(100)
+  }).sort({createTime: -1}).limit(100)
 });
 
 
