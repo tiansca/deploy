@@ -1,10 +1,10 @@
 const shell = require('shelljs')
 var path = require('../config/path')
-async function clone(url) {
+async function clone(url, name) {
     return new Promise(async (resolve, reject) => {
         console.log(path)
         shell.cd(path)
-        const res = await shell.exec('git clone ' + url)
+        const res = await shell.exec('git clone ' + url + (name?' ' + name : ''))
         if (res.code !== 0) {
             reject()
             console.log(res)

@@ -62,7 +62,7 @@ router.post('/add_project', function(req, res, next) {
         console.log('新增');
         // res.redirect('/userL')
         try {
-          await clone(postData.url).then(() => {
+          await clone(postData.url, postData.name).then(() => {
             res.send({code: 0, msg: '新增成功！拉取项目成功！'})
           }).catch(() => {
             res.send({code: 1, msg: '新增成功！拉取项目失败！'})
