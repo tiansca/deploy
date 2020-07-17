@@ -26,10 +26,7 @@ router.post('/add_project', function(req, res, next) {
     name: req.body.name,
     url: req.body.url,
     branch: req.body.branch,
-    ip: req.body.ip,
-    path:req.body.path,
-    password:req.body.password,
-    username: req.body.username
+    build: req.body.build,
   };
   project.findOne({name:postData.name, branch:postData.branch},function (err, data) {
     if(err){
@@ -147,10 +144,7 @@ router.post('/update', function(req, res, next) {
     name: req.body.name,
     url: req.body.url,
     branch: req.body.branch,
-    ip: req.body.ip,
-    path:req.body.path,
-    password:req.body.password,
-    username: req.body.username,
+    build: req.body.build,
     _id: req.body._id
   };
   project.findOne({_id:postData._id},function (err, data) {

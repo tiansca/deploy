@@ -5,8 +5,6 @@ var recordSchema = new Schema({
     project_id:String,
     name: String,
     branch: String,
-    ip: String,
-    path: String,
     createTime: {
         type: Date,
         default: Date.now

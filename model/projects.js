@@ -17,10 +17,7 @@ var projectSchema = new Schema({
         type:Boolean,
         default:true
     },
-    ip: String,
-    path: String,
-    username: String,
-    password: String
+    build: String
 }, {
     versionKey: false,
     timestamps: { createdAt: 'createTime', updatedAt: 'updateTime' }

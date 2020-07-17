@@ -138,17 +138,22 @@ async function deploy(project) {
     await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(deployPath, project.name)})
     await shell.exec('npm install', {cwd: path.resolve(deployPath, project.name)})
     // console.log('正在打包...')
-    await shell.exec('npm run build:stage', {cwd: path.resolve(deployPath, project.name)})
+    await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(deployPath, project.name)})
+    request('http://localhost:3210/add_record?id=' + project._id.toString() + '&name=' + project.name + '&branch=' + project.branch , function (error, response, body) {
+        if (!error) {
+            console.log(body);
+        }
+    });
     // console.log('打包成功')
-    try {
-        // 压缩代码
-        await zipDist(project)
-        // 上传服务器
-        await uploadZipBySSH(project)
-        // console.log(mongoose.Types.ObjectId(project._id).toString())
-    } catch (e) {
-        console.log(e)
-    }
+    // try {
+    //     // 压缩代码
+    //     await zipDist(project)
+    //     // 上传服务器
+    //     await uploadZipBySSH(project)
+    //     // console.log(mongoose.Types.ObjectId(project._id).toString())
+    // } catch (e) {
+    //     console.log(e)
+    // }
 
 }
 
