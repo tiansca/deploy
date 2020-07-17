@@ -61,21 +61,27 @@ const runCommand = async(command, path) => {
 }
 
 // 清空线上目标目录里的旧文件
-const clearOldFile = async(project) => {
+const clearOldFile = async(path) => {
     const commands = ['ls', 'rm -rf *']
     await Promise.all(commands.map(async(it) => {
-        return await runCommand(it, project.path)
+        return await runCommand(it, path)
     }))
 }
 
 // 传送zip文件到服务器
 const uploadZipBySSH = async(project) => {
-    const onlinePath = project.path
+    if (!project.name || project.path === '/' || !project.rootPath || project.rootPath === '/') {
+        console.log('路径不完整')
+        return false
+    }
+    let onlinePath = project.rootPath + '/' + project.path
+    onlinePath = onlinePath.replace('///', '/')
+    onlinePath = onlinePath.replace('//', '/')
     // 连接ssh
     await connectSSH(project)
     // 线上目标文件清空
     console.log('正在清空...')
-    await clearOldFile(project)
+    await clearOldFile(onlinePath)
     console.log('正在上传...')
     const distZipPath = path.resolve(deployPath, './' + project.name, './dist.zip')
     try {
@@ -100,7 +106,7 @@ const uploadZipBySSH = async(project) => {
         //         console.log('err', err)
         //     }
         // })
-        request('http://localhost:3210/add_record?id=' + id + '&name=' + project.name + '&branch=' + project.branch + '&ip=' + project.ip + '&path=' + project.path, function (error, response, body) {
+        request('http://localhost:3210/add_record?id=' + id + '&name=' + project.name + '&branch=' + project.branch + '&ip=' + project.ip + '&path=' + onlinePath, function (error, response, body) {
             if (!error) {
                 console.log(body);
             }
@@ -138,7 +144,7 @@ async function deploy(project) {
     await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(deployPath, project.name)})
     await shell.exec('npm install', {cwd: path.resolve(deployPath, project.name)})
     // console.log('正在打包...')
-    await shell.exec('npm run build:stage', {cwd: path.resolve(deployPath, project.name)})
+    await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(deployPath, project.name)})
     // console.log('打包成功')
     try {
         // 压缩代码

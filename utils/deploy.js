@@ -118,7 +118,7 @@ async function deploy(project) {
     await shell.exec('git checkout ' + project.branch)
     await shell.exec('npm install')
     console.log('正在打包...')
-    await shell.exec('npm run build:stage')
+    await shell.exec(project.build ? project.build : 'npm run build:stage')
     console.log('打包成功')
     try {
         // 压缩代码

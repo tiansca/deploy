@@ -1,10 +1,11 @@
 var mongoose = require('mongoose');
 var Schema = mongoose.Schema;
-
-var projectSchema = new Schema({
+var serverSchema = new Schema({
     name:String,
-    url:String,
-    branch: String,
+    ip:String,
+    username: String,
+    password: String,
+    rootPath: String,
     createTime:{
         type:Date,
         default:Date.now
@@ -16,13 +17,10 @@ var projectSchema = new Schema({
     status:{
         type:Boolean,
         default:true
-    },
-    server: String,
-    path: String,
-    build: String
+    }
 }, {
     versionKey: false,
     timestamps: { createdAt: 'createTime', updatedAt: 'updateTime' }
 })
 
-module.exports = mongoose.model('projects', projectSchema);
+module.exports = mongoose.model('server', serverSchema);

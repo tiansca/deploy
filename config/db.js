@@ -3,8 +3,9 @@
  */
 var mongoose = require('mongoose');
 // var url ="mongodb://root:tianshicong@localhost:27017/memo";
-var url ="mongodb://root:tianshicong@localhost:27017/deploy";
+var url ="mongodb://root:tianshicong@localhost:27017/deploy-local";
 mongoose.set('useCreateIndex', true)
+mongoose.set('useFindAndModify', false)
 mongoose.connect(url);
 var db = mongoose.connection;
 // 连接成功
