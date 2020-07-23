@@ -70,8 +70,8 @@ const clearOldFile = async(path) => {
 
 // 传送zip文件到服务器
 const uploadZipBySSH = async(project) => {
-    if (!project.name || project.path === '/' || !project.rootPath || project.rootPath === '/') {
-        console.log('路径不完整')
+    if (!project.path || project.path === '/' || !project.rootPath || project.rootPath === '/') {
+        console.log('路径不完整', project.path, project.rootPath)
         return false
     }
     let onlinePath = project.rootPath + '/' + project.path
