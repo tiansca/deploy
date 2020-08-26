@@ -15,21 +15,25 @@ var deployPath = require('../config/path')
 const path = require('path')
 
 const getServer = async (project) => {
-    if (project.server) {
-        await server.findOne({_id: project.server}, function (err, data) {
-            if (err || !data) {
-                console.log('没有找到服务器！')
-            } else {
-                const server = data.toObject()
-                project.ip = server.ip
-                project.username = server.username
-                project.password = server.password
-                project.rootPath = server.rootPath
-                console.log('返回', project)
-            }
-        })
-    }
-    return project
+    return new Promise(function (resolve, reject) {
+        if (project.server) {
+            server.findOne({_id: project.server}, function (err, data) {
+                if (err || !data) {
+                    console.log('没有找到服务器信息！')
+                    reject(err)
+                } else {
+                    const server = data.toObject()
+                    project.ip = server.ip
+                    project.username = server.username
+                    project.password = server.password
+                    project.rootPath = server.rootPath
+                    resolve(project)
+                }
+            })
+        } else {
+            reject('没有服务器id')
+        }
+    })
 }
 
 /* GET home page. */
@@ -147,10 +151,11 @@ router.get('/deploy', function(req, res, next) {
       } else {
         res.send({code: 0, msg: '启动部署'})
         try {
-          console.log('项目=>', data)
+          // console.log('项目=>', data)
           data = data.toObject()
           data._id = data._id.toString()
           const newData = await getServer(data)
+          console.log('项目=>', newData)
           runDeploy(newData)
         } catch (e) {
           console.log(e)

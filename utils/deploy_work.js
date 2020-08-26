@@ -131,6 +131,7 @@ function getStat(path){
 }
 
 async function deploy(project) {
+    // console.log('拿到数据=>', project)
     let isExists = await getStat(path.resolve(deployPath, project.name));
     //如果该路径且不是文件，返回true
     if(!isExists || !isExists.isDirectory()){
@@ -160,7 +161,7 @@ async function deploy(project) {
 
 const runDeploy = (data) => {
     if (isMainThread) {
-        // console.log('打印1=>', data._doc)
+        // console.log('传递数据=>', data)
         const worker = new Worker(__filename, {
             // workerData: JSON.parse(JSON.stringify(data._doc))
             workerData: data
