@@ -19,7 +19,8 @@ var projectSchema = new Schema({
     },
     server: String,
     path: String,
-    build: String
+    build: String,
+    localPath: String
 }, {
     versionKey: false,
     timestamps: { createdAt: 'createTime', updatedAt: 'updateTime' }

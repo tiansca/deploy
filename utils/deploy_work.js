@@ -19,8 +19,8 @@ let request = require("request");
 
 // 压缩代码
 const zipDist = async(project) => {
-    const distDir = path.resolve(deployPath, './' + project.name, './dist') // 待打包
-    const distZipPath = path.resolve(deployPath, './' + project.name, './dist.zip')
+    const distDir = path.resolve(deployPath, './' + (project.localPath || project.name), './dist') // 待打包
+    const distZipPath = path.resolve(deployPath, './' + (project.localPath || project.name), './dist.zip')
     console.log('压缩...')
     try {
         await zipFile.zip.compressDir(distDir, distZipPath)
@@ -83,7 +83,7 @@ const uploadZipBySSH = async(project) => {
     console.log('正在清空...')
     await clearOldFile(onlinePath)
     console.log('正在上传...')
-    const distZipPath = path.resolve(deployPath, './' + project.name, './dist.zip')
+    const distZipPath = path.resolve(deployPath, './' + (project.localPath || project.name), './dist.zip')
     try {
         await SSH.putFiles([{ local: distZipPath, remote: onlinePath + '/dist.zip' }]) // local 本地 ; remote 服务器 ;
         await runCommand('unzip ./dist.zip', onlinePath) // 解压
@@ -132,20 +132,21 @@ function getStat(path){
 
 async function deploy(project) {
     // console.log('拿到数据=>', project)
-    let isExists = await getStat(path.resolve(deployPath, project.name));
+    const projectPath = project.localPath || project.name
+    let isExists = await getStat(path.resolve(deployPath, projectPath));
     //如果该路径且不是文件，返回true
     if(!isExists || !isExists.isDirectory()){
         console.log('项目路径不存在！')
         return true;
     }
-    console.log('路径=>', path.resolve(deployPath, project.name))
+    console.log('路径=>', path.resolve(deployPath, projectPath))
     // shell.cd(path.resolve(deployPath, './' + project.name))
-    await shell.exec('git pull', {cwd: path.resolve(deployPath, project.name)})
+    await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(deployPath, projectPath)})
+    await shell.exec('git pull', {cwd: path.resolve(deployPath, projectPath)})
     // console.log('拉取成功')
-    await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(deployPath, project.name)})
-    await shell.exec('npm install', {cwd: path.resolve(deployPath, project.name)})
+    await shell.exec('npm install', {cwd: path.resolve(deployPath, projectPath)})
     // console.log('正在打包...')
-    await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(deployPath, project.name)})
+    await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(deployPath, projectPath)})
     // console.log('打包成功')
     try {
         // 压缩代码

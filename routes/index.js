@@ -51,7 +51,8 @@ router.post('/add_project', function(req, res, next) {
     branch: req.body.branch,
     server: req.body.server,
     path:req.body.path,
-    build: req.body.build
+    build: req.body.build,
+    localPath: req.body.localPath
   };
   project.findOne({name:postData.name, branch:postData.branch},function (err, data) {
     if(err){
@@ -66,7 +67,7 @@ router.post('/add_project', function(req, res, next) {
         console.log('新增');
         // res.redirect('/userL')
         try {
-          await clone(postData.url, postData.name).then(() => {
+          await clone(postData.url, postData.localPath || postData.name).then(() => {
             res.send({code: 0, msg: '新增成功！拉取项目成功！'})
           }).catch(() => {
             res.send({code: 1, msg: '新增成功！拉取项目失败！'})
@@ -175,7 +176,8 @@ router.post('/update', function(req, res, next) {
     path:req.body.path,
     server:req.body.server,
     _id: req.body._id,
-    build: req.body.build
+    build: req.body.build,
+    localPath: req.body.localPath
   };
   project.findOne({_id:postData._id},function (err, data) {
     if(err || !data){
