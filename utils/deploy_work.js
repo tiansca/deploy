@@ -1,5 +1,5 @@
 const shell = require('shelljs')
-var deployPath = require('../config/path')
+var storagePath = require('../config/path')
 const zipFile = require('compressing')
 const node_ssh = require('node-ssh') // ssh连接服务器
 const SSH = new node_ssh()
@@ -19,8 +19,8 @@ let request = require("request");
 
 // 压缩代码
 const zipDist = async(project) => {
-    const distDir = path.resolve(deployPath, './' + project.name, './dist') // 待打包
-    const distZipPath = path.resolve(deployPath, './' + project.name, './dist.zip')
+    const distDir = path.resolve(storagePath, './' + project.name, './dist') // 待打包
+    const distZipPath = path.resolve(storagePath, './' + project.name, './dist.zip')
     console.log('压缩...')
     try {
         await zipFile.zip.compressDir(distDir, distZipPath)
@@ -77,7 +77,7 @@ const uploadZipBySSH = async(project) => {
     console.log('正在清空...')
     await clearOldFile(project)
     console.log('正在上传...')
-    const distZipPath = path.resolve(deployPath, './' + project.name, './dist.zip')
+    const distZipPath = path.resolve(storagePath, './' + project.name, './dist.zip')
     try {
         await SSH.putFiles([{ local: distZipPath, remote: onlinePath + '/dist.zip' }]) // local 本地 ; remote 服务器 ;
         await runCommand('unzip ./dist.zip', onlinePath) // 解压
@@ -125,20 +125,42 @@ function getStat(path){
 }
 
 async function deploy(project) {
-    let isExists = await getStat(path.resolve(deployPath, project.name));
+    const directoryName = project.directoryName || project.name
+    let isExists = await getStat(path.resolve(storagePath, directoryName));
     //如果该路径且不是文件，返回true
     if(!isExists || !isExists.isDirectory()){
         console.log('项目路径不存在！')
         return true;
     }
-    console.log('路径=>', path.resolve(deployPath, project.name))
-    // shell.cd(path.resolve(deployPath, './' + project.name))
-    await shell.exec('git pull', {cwd: path.resolve(deployPath, project.name)})
+    console.log('路径=>', path.resolve(storagePath, directoryName))
+    // shell.cd(path.resolve(storagePath, './' + project.name))
+    await shell.exec('git pull', {cwd: path.resolve(storagePath, directoryName)})
     // console.log('拉取成功')
-    await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(deployPath, project.name)})
-    await shell.exec('npm install', {cwd: path.resolve(deployPath, project.name)})
+    await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, directoryName)})
+    // 打包
+    try{
+        // await shell.exec('rm -rf .npmrc package-lock.json', {cwd: path.resolve(storagePath, project.name)})
+        await shell.exec('npm install', {cwd: path.resolve(storagePath, directoryName)})
+        await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, directoryName)})
+    } catch (e) {
+        console.log(e)
+        return
+    }
+
     // console.log('正在打包...')
-    await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(deployPath, project.name)})
+    const deployPath = project.deployPath
+    if (deployPath) {
+        let isExists = await getStat(deployPath);
+        //如果该路径且不是文件，返回true
+        if(!isExists || !isExists.isDirectory()){
+            console.log('项目路径不存在！')
+        } else {
+            // 清空部署目录
+            await shell.exec('rm -rf *', {cwd: path.resolve(deployPath)})
+            // 复制打包文件到部署目录
+            await shell.exec('cp ./dist/* ' + deployPath, {cwd: path.resolve(storagePath, directoryName)})
+        }
+    }
     request('http://localhost:3210/add_record?id=' + project._id.toString() + '&name=' + project.name + '&branch=' + project.branch , function (error, response, body) {
         if (!error) {
             console.log(body);
