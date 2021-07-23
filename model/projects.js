@@ -3,6 +3,7 @@ var Schema = mongoose.Schema;
 
 var projectSchema = new Schema({
     name:String,
+    directoryName: String,
     url:String,
     branch: String,
     createTime:{
@@ -17,7 +18,8 @@ var projectSchema = new Schema({
         type:Boolean,
         default:true
     },
-    build: String
+    build: String,
+    deployPath: String
 }, {
     versionKey: false,
     timestamps: { createdAt: 'createTime', updatedAt: 'updateTime' }

@@ -27,6 +27,8 @@ router.post('/add_project', function(req, res, next) {
     url: req.body.url,
     branch: req.body.branch,
     build: req.body.build,
+    deployPath: req.body.deployPath || '',
+    directoryName: req.body.directoryName || ''
   };
   project.findOne({name:postData.name, branch:postData.branch},function (err, data) {
     if(err){
@@ -145,7 +147,9 @@ router.post('/update', function(req, res, next) {
     url: req.body.url,
     branch: req.body.branch,
     build: req.body.build,
-    _id: req.body._id
+    _id: req.body._id,
+    deployPath: req.body.deployPath || '',
+    directoryName: req.body.directoryName || ''
   };
   project.findOne({_id:postData._id},function (err, data) {
     if(err || !data){
