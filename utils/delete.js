@@ -20,9 +20,10 @@ function rmdirPromise(filePath) {
             reject()
             return
         }
-        fs.stat(filePath, function (err, stat) {
+        fs.stat(filePath, async function (err, stat) {
             if (err) reject(err)
             if (stat.isFile()) {
+                await fs.chmodSync(filePath,'0777')
                 fs.unlink(filePath, function (err) {
                     if (err) reject(err)
                     resolve()
@@ -32,8 +33,9 @@ function rmdirPromise(filePath) {
                     if (err) reject(err)
                     dirs = dirs.map(dir => path.join(filePath, dir)) // a/b a/c
                     let index = 0;
-                    (function next() {
+                    (async function next() {
                         if (index === dirs.length) {
+                            await fs.chmodSync(filePath, '0777')
                             fs.rmdir(filePath, function (err) {
                                 if (err) reject(err)
                                 resolve()
