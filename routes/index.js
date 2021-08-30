@@ -27,6 +27,8 @@ const getServer = async (project) => {
                     project.username = server.username
                     project.password = server.password
                     project.rootPath = server.rootPath
+                    project.privateKey = server.privateKey
+                    project.connectionType = server.connectionType
                     resolve(project)
                 }
             })
@@ -252,6 +254,8 @@ router.post('/add_server', function (req, res, next) {
         ip: req.body.ip,
         rootPath:req.body.rootPath,
         password:req.body.password,
+        connectionType:req.body.connectionType,
+        privateKey:req.body.privateKey,
         username: req.body.username
     };
     server.findOne({ip:postData.name, rootPath:postData.rootPath},function (err, data) {
@@ -277,6 +281,8 @@ router.post('/update_server', function(req, res, next) {
         rootPath:req.body.rootPath,
         password:req.body.password,
         username: req.body.username,
+        connectionType:req.body.connectionType,
+        privateKey:req.body.privateKey,
         _id: req.body._id
     };
     server.findOne({_id:postData._id},function (err, data) {

@@ -7,6 +7,7 @@ const path = require('path')
 const fs = require('fs')
 let { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 let request = require("request");
+const myDelete = require('./delete')
 // let mongoose=require('mongoose');
 
 
@@ -37,12 +38,24 @@ const zipDist = async(project) => {
 // 连接服务器
 const connectSSH = async(project) => {
     try {
-        await SSH.connect({
-            host: project.ip,
-            username: project.username,
-            // privateKey: config.PRIVATE_KEY, //秘钥登录(推荐) 方式一
-            password: project.password // 密码登录 方式二
-        })
+        if (project.connectionType) {
+            // 密钥连接
+            console.log(path.resolve(project.privateKey))
+            await SSH.connect({
+                host: project.ip,
+                username: project.username,
+                privateKey: path.resolve(project.privateKey), //秘钥登录(推荐) 方式一
+                // password: project.password // 密码登录 方式二
+            })
+        } else {
+            // 密码连接
+            await SSH.connect({
+                host: project.ip,
+                username: project.username,
+                // privateKey: config.PRIVATE_KEY, //秘钥登录(推荐) 方式一
+                password: project.password // 密码登录 方式二
+            })
+        }
     } catch (error) {
         console.log('连接失败')
         // process.exit() // 退出流程
@@ -141,9 +154,13 @@ async function deploy(project) {
     }
     console.log('路径=>', path.resolve(deployPath, projectPath))
     // shell.cd(path.resolve(deployPath, './' + project.name))
+    await shell.exec('git checkout .', {cwd: path.resolve(deployPath, projectPath)})
     await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(deployPath, projectPath)})
     await shell.exec('git pull', {cwd: path.resolve(deployPath, projectPath)})
     // console.log('拉取成功')
+    // 删除.npmrc文件
+    await myDelete(path.resolve(deployPath, projectPath, '.npmrc'))
+    await myDelete(path.resolve(deployPath, projectPath, 'package-lock.json'))
     await shell.exec('npm install', {cwd: path.resolve(deployPath, projectPath)})
     // console.log('正在打包...')
     await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(deployPath, projectPath)})
