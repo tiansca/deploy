@@ -159,8 +159,12 @@ async function deploy(project) {
     await shell.exec('git pull', {cwd: path.resolve(deployPath, projectPath)})
     // console.log('拉取成功')
     // 删除.npmrc文件
-    await myDelete(path.resolve(deployPath, projectPath, '.npmrc'))
-    await myDelete(path.resolve(deployPath, projectPath, 'package-lock.json'))
+    try {
+        await myDelete(path.resolve(deployPath, projectPath, '.npmrc'))
+        await myDelete(path.resolve(deployPath, projectPath, 'package-lock.json'))
+    } catch (e) {
+        console.log(e)
+    }
     await shell.exec('npm install', {cwd: path.resolve(deployPath, projectPath)})
     // console.log('正在打包...')
     await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(deployPath, projectPath)})
