@@ -1,9 +1,6 @@
-/**
- * Created by administrator on 2019/10/31.
- */
 var mongoose = require('mongoose');
 // var url ="mongodb://root:tianshicong@localhost:27017/memo";
-var url ="mongodb://root:tianshicong@localhost:27017/deploy-online";
+var url ="mongodb://tiansc:tianshicong@localhost:27017/deploy";
 mongoose.set('useCreateIndex', true)
 mongoose.connect(url);
 var db = mongoose.connection;

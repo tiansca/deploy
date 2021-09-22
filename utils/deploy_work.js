@@ -134,6 +134,7 @@ async function deploy(project) {
     }
     console.log('路径=>', path.resolve(storagePath, directoryName))
     // shell.cd(path.resolve(storagePath, './' + project.name))
+    await shell.exec('git checkout .', {cwd: path.resolve(deployPath, directoryName)})
     await shell.exec('git pull', {cwd: path.resolve(storagePath, directoryName)})
     // console.log('拉取成功')
     await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, directoryName)})

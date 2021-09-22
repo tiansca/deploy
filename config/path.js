@@ -1,2 +1,2 @@
-var path = 'D:\\myproject\\projects-online'
+var path = '/home/project/'
 module.exports = path
