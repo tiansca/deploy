@@ -7,9 +7,9 @@ const path = require('path')
 const fs = require('fs')
 let { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 let request = require("request");
+const simpleCopy = require('./simpleCopy')
+const simpleDelete = require('./simpleDelete')
 // let mongoose=require('mongoose');
-
-
 //等待两秒
 // const wait2s = async () => {
 //     await setTimeout(function () {
@@ -91,15 +91,6 @@ const uploadZipBySSH = async(project) => {
         console.log('部署成功！')
         const id = project._id.toString()
         console.log(id)
-        // record.create({
-        //     project_id: id
-        // }, function (err, data) {
-        //     if (!err) {
-        //         console.log('记录成功')
-        //     } else {
-        //         console.log('err', err)
-        //     }
-        // })
         request('http://localhost:3210/add_record?id=' + id + '&name=' + project.name + '&branch=' + project.branch + '&ip=' + project.ip + '&path=' + project.path, function (error, response, body) {
             if (!error) {
                 console.log(body);
@@ -133,14 +124,10 @@ async function deploy(project) {
         return true;
     }
     console.log('路径=>', path.resolve(storagePath, directoryName))
-    // shell.cd(path.resolve(storagePath, './' + project.name))
-    await shell.exec('git checkout .', {cwd: path.resolve(deployPath, directoryName)})
     await shell.exec('git pull', {cwd: path.resolve(storagePath, directoryName)})
-    // console.log('拉取成功')
     await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, directoryName)})
     // 打包
     try{
-        // await shell.exec('rm -rf .npmrc package-lock.json', {cwd: path.resolve(storagePath, project.name)})
         await shell.exec('npm install', {cwd: path.resolve(storagePath, directoryName)})
         await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, directoryName)})
     } catch (e) {
@@ -157,9 +144,9 @@ async function deploy(project) {
             console.log('项目路径不存在！')
         } else {
             // 清空部署目录
-            await shell.exec('rm -rf *', {cwd: path.resolve(deployPath)})
+            await simpleDelete(deployPath)
             // 复制打包文件到部署目录
-            await shell.exec('cp ./dist/* ' + deployPath, {cwd: path.resolve(storagePath, directoryName)})
+            await simpleCopy(path.resolve(storagePath, directoryName, './dist'), path.resolve(deployPath))
         }
     }
     request('http://localhost:3210/add_record?id=' + project._id.toString() + '&name=' + project.name + '&branch=' + project.branch , function (error, response, body) {
@@ -167,17 +154,6 @@ async function deploy(project) {
             console.log(body);
         }
     });
-    // console.log('打包成功')
-    // try {
-    //     // 压缩代码
-    //     await zipDist(project)
-    //     // 上传服务器
-    //     await uploadZipBySSH(project)
-    //     // console.log(mongoose.Types.ObjectId(project._id).toString())
-    // } catch (e) {
-    //     console.log(e)
-    // }
-
 }
 
 const runDeploy = (data) => {
