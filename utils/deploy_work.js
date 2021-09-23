@@ -144,7 +144,7 @@ async function deploy(project) {
         errorMsg += await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
         await isError(errorMsg)
         // 打包
-        errorMsg += await shell.exec('npm install', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
+        errorMsg += await shell.exec('npm install --unsafe-perm', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
         await isError(errorMsg)
         errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
         await isError(errorMsg)
