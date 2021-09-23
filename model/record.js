@@ -12,6 +12,14 @@ var recordSchema = new Schema({
     updateTime: {
         type: Date,
         default: Date.now
+    },
+    log: {
+        type: String,
+        default: ''
+    },
+    success: {
+        type: Boolean,
+        default: true
     }
 }, {
     versionKey: false,

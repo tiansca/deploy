@@ -1,5 +1,6 @@
 const shell = require('shelljs')
-var storagePath = require('../config/path')
+var { storagePath } = require('../config/path')
+var { deployRootPath } = require('../config/path')
 const zipFile = require('compressing')
 const node_ssh = require('node-ssh') // ssh连接服务器
 const SSH = new node_ssh()
@@ -115,6 +116,14 @@ function getStat(path){
     })
 }
 
+const isError = (str) => {
+    if (str.indexOf('err') !== -1 || str.indexOf('ERR') !== -1) {
+        return Promise.reject(str)
+    } else {
+        return Promise.resolve()
+    }
+}
+
 async function deploy(project) {
     const directoryName = project.directoryName || project.name
     let isExists = await getStat(path.resolve(storagePath, directoryName));
@@ -123,37 +132,78 @@ async function deploy(project) {
         console.log('项目路径不存在！')
         return true;
     }
-    console.log('路径=>', path.resolve(storagePath, directoryName))
-    await shell.exec('git pull', {cwd: path.resolve(storagePath, directoryName)})
-    await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, directoryName)})
-    // 打包
-    try{
-        await shell.exec('npm install', {cwd: path.resolve(storagePath, directoryName)})
-        await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, directoryName)})
-    } catch (e) {
-        console.log(e)
-        return
-    }
-
-    // console.log('正在打包...')
-    const deployPath = project.deployPath
-    if (deployPath) {
-        let isExists = await getStat(deployPath);
-        //如果该路径且不是文件，返回true
-        if(!isExists || !isExists.isDirectory()){
-            console.log('项目路径不存在！')
-        } else {
-            // 清空部署目录
-            await simpleDelete(deployPath)
-            // 复制打包文件到部署目录
-            await simpleCopy(path.resolve(storagePath, directoryName, './dist'), path.resolve(deployPath))
+    let errorMsg = ''
+    let finished = false
+    try {
+        console.log('路径=>', path.resolve(storagePath, directoryName))
+        errorMsg += await shell.exec('git checkout .', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
+        console.log('error =>', errorMsg)
+        await isError(errorMsg)
+        errorMsg += await shell.exec('git pull', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
+        await isError(errorMsg)
+        errorMsg += await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
+        await isError(errorMsg)
+        // 打包
+        errorMsg += await shell.exec('npm install', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
+        await isError(errorMsg)
+        errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
+        await isError(errorMsg)
+        console.log('error =>', errorMsg)
+        // console.log('正在打包...')
+        let deployPath = project.deployPath
+        if (deployPath) {
+            if (deployPath[0] === '/') {
+                deployPath = deployPath.replace('/', '')
+            }
+            const fullDeployPath = path.resolve(deployRootPath,'./', deployPath)
+            let isExists = await getStat(fullDeployPath);
+            //如果该路径且不是文件，返回true
+            console.log(deployRootPath, fullDeployPath)
+            if(!isExists || !isExists.isDirectory()){
+                console.log('项目路径不存在！')
+                throw '部署路径不存在'
+            } else {
+                // 清空部署目录
+                await simpleDelete(fullDeployPath)
+                // 复制打包文件到部署目录
+                await simpleCopy(path.resolve(storagePath, directoryName, './dist'), path.resolve(fullDeployPath))
+                finished = true
+            }
         }
+    } catch (e) {
+        errorMsg += e || '未知错误'
+        console.log('错误', e)
     }
-    request('http://localhost:3210/add_record?id=' + project._id.toString() + '&name=' + project.name + '&branch=' + project.branch , function (error, response, body) {
-        if (!error) {
-            console.log(body);
+    // if (errorMsg) {
+    //     errorMsg = encodeURI(errorMsg)
+    // }
+    // request('http://localhost:3210/add_record?id=' + project._id.toString() + '&name=' + project.name + '&branch=' + project.branch + "&log=" + errorMsg + '&success=' + finished, function (error, response, body) {
+    //     if (!error) {
+    //         console.log(body);
+    //     } else {
+    //         console.log(error)
+    //     }
+    // });
+    request({
+        url: 'http://localhost:3210/add_record',
+        method: "POST",
+        json: true,
+        headers: {
+            "content-type": "application/json",
+        },
+        body: {
+            id: project._id.toString(),
+            name: project.name,
+            branch: project.branch,
+            log: errorMsg,
+            success: finished
+        }
+    }, function(error, response, body) {
+        if (!error && response.statusCode == 200) {
+            console.log(body) // 请求成功的处理逻辑
         }
     });
+
 }
 
 const runDeploy = (data) => {

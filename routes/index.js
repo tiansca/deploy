@@ -10,7 +10,7 @@ var rmdirPromise = require('../utils/delete')
 
 
 
-var deployPath = require('../config/path')
+var { storagePath } = require('../config/path')
 const path = require('path')
 
 /* GET home page. */
@@ -19,7 +19,8 @@ router.get('/', function(req, res, next) {
   // shell.cd('D:\\新\\lingxi-jsc')
   // shell.cd('D:\\新\\jsc\\lingxi-jsc')
   // shell.exec('npm run deploy:stage')
-  res.send('test')
+  console.log(req)
+  res.send()
 });
 router.post('/add_project', function(req, res, next) {
   var postData = {
@@ -176,22 +177,23 @@ router.get('/remove', function(req, res, next) {
       }else {
         res.send({code:0,msg:"删除成功"})
         console.log(data.name)
-        rmdirPromise(path.resolve(deployPath, './' + data.name))
+        console.log(storagePath)
+        rmdirPromise(path.resolve(storagePath, './' + (data.directoryName || data.name)))
       }
     })
   } else {
     res.send({code: -1, msg: '缺少id'})
   }
 });
-router.get('/add_record', function(req, res, next) {
-  const id = req.query.id
+router.post('/add_record', function(req, res, next) {
+  const id = req.body.id
   if (id) {
     record.create({
         project_id: id,
-        name: req.query.name,
-        branch: req.query.branch,
-        ip: req.query.ip,
-        path: req.query.path
+        name: req.body.name,
+        branch: req.body.branch,
+        log: req.body.log,
+        success: req.body.success
     }, function (err, data) {
         if (!err) {
             console.log('记录成功')

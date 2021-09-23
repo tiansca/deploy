@@ -39,7 +39,7 @@ function rmdirPromise(filePath) {
                             fs.rmdir(filePath, function (err) {
                                 if (err) reject(err)
                                 resolve()
-                                console.log('删除文件夹成功')
+                                // console.log('删除文件夹成功')
                             })
                         } else {
                             rmdirPromise(dirs[index++]).then(() => {
