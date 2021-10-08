@@ -22,7 +22,7 @@ app.all('*', function (req, res, next) {
   // 判断权限
   const whiteList = ['tiansc']
   if (!req.headers['username'] || !whiteList.includes(req.headers['username'])) {
-    res.send({code: -1, msg: '没有权限'})
+    res.send({code: -1, msg: '没有权限', username: req.headers['username']})
     return
   }
   next();
