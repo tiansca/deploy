@@ -19,6 +19,12 @@ app.all('*', function (req, res, next) {
   res.header('Access-Control-Allow-Headers', 'Content-Type');
   res.header('Access-Control-Allow-Methods', '*');
   res.header('Content-Type', 'application/json;charset=utf-8');
+  // 判断权限
+  const whiteList = ['tiansc']
+  if (!req.req.headers['username'] || !whiteList.includes(req.headers['username'])) {
+    res.send({code: -1, msg: '没有权限'})
+    return
+  }
   next();
 });
 
