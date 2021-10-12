@@ -139,15 +139,20 @@ async function deploy(project) {
         errorMsg += await shell.exec('git checkout .', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
         console.log('error =>', errorMsg)
         await isError(errorMsg)
+        errorMsg += 'git还原完成<br>'
         errorMsg += await shell.exec('git pull', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
         await isError(errorMsg)
+        errorMsg += 'git拉取完成<br>'
         errorMsg += await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
         await isError(errorMsg)
+        errorMsg += 'git切换分支完成<br>'
         // 打包
         errorMsg += await shell.exec('npm install --unsafe-perm', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
         await isError(errorMsg)
+        errorMsg += 'npm install 完成<br>'
         errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
         await isError(errorMsg)
+        errorMsg += '打包完成<br>'
         console.log('error =>', errorMsg)
         // console.log('正在打包...')
         let deployPath = project.deployPath
@@ -166,10 +171,15 @@ async function deploy(project) {
                 // 清空部署目录
                 await simpleDelete(fullDeployPath)
                 // 复制打包文件到部署目录
-                await simpleCopy(path.resolve(storagePath, directoryName, './dist'), path.resolve(fullDeployPath))
-                finished = true
+                let outputDir = project.outputDir || 'dist'
+                if (outputDir[0] === '/') {
+                    outputDir = outputDir.replace('/', '')
+                }
+                await simpleCopy(path.resolve(storagePath, directoryName, './', outputDir), path.resolve(fullDeployPath))
             }
         }
+        errorMsg += '部署完成<br>'
+        finished = true
     } catch (e) {
         errorMsg += e || '未知错误'
         console.log('错误', e)

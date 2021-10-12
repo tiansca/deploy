@@ -19,7 +19,8 @@ var projectSchema = new Schema({
         default:true
     },
     build: String,
-    deployPath: String
+    deployPath: String,
+    outputDir: String
 }, {
     versionKey: false,
     timestamps: { createdAt: 'createTime', updatedAt: 'updateTime' }
