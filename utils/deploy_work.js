@@ -20,7 +20,11 @@ const myDelete = require('./delete')
 
 // 压缩代码
 const zipDist = async(project) => {
-    const distDir = path.resolve(deployPath, './' + (project.localPath || project.name), './dist') // 待打包
+    let outputDir = project.outputDir || 'dist'
+    if (outputDir[0] === '/') {
+        outputDir = outputDir.replace('/', '')
+    }
+    const distDir = path.resolve(deployPath, './' + (project.localPath || project.name), './', outputDir) // 待打包
     const distZipPath = path.resolve(deployPath, './' + (project.localPath || project.name), './dist.zip')
     console.log('压缩...')
     try {
@@ -90,6 +94,7 @@ const uploadZipBySSH = async(project) => {
     let onlinePath = project.rootPath + '/' + project.path
     onlinePath = onlinePath.replace('///', '/')
     onlinePath = onlinePath.replace('//', '/')
+    console.log('onlinePath', onlinePath)
     // 连接ssh
     await connectSSH(project)
     // 线上目标文件清空
@@ -110,22 +115,10 @@ const uploadZipBySSH = async(project) => {
         console.log('部署成功！')
         const id = project._id.toString()
         console.log(id)
-        // record.create({
-        //     project_id: id
-        // }, function (err, data) {
-        //     if (!err) {
-        //         console.log('记录成功')
-        //     } else {
-        //         console.log('err', err)
-        //     }
-        // })
-        request('http://localhost:3210/add_record?id=' + id + '&name=' + project.name + '&branch=' + project.branch + '&ip=' + project.ip + '&path=' + onlinePath, function (error, response, body) {
-            if (!error) {
-                console.log(body);
-            }
-        });
+        return Promise.resolve('部署成功')
     } catch (error) {
         console.log(error)
+        return Promise.reject(error)
         //process.exit() // 退出流程
     }
 }
@@ -143,6 +136,15 @@ function getStat(path){
     })
 }
 
+const isError = (str) => {
+    // console.log('msg', str)
+    if (str.indexOf('err') !== -1 || str.indexOf('ERR') !== -1) {
+        return Promise.reject(str)
+    } else {
+        return Promise.resolve()
+    }
+}
+
 async function deploy(project) {
     // console.log('拿到数据=>', project)
     const projectPath = project.localPath || project.name
@@ -152,33 +154,66 @@ async function deploy(project) {
         console.log('项目路径不存在！')
         return true;
     }
-    console.log('路径=>', path.resolve(deployPath, projectPath))
-    // shell.cd(path.resolve(deployPath, './' + project.name))
-    await shell.exec('git checkout .', {cwd: path.resolve(deployPath, projectPath)})
-    await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(deployPath, projectPath)})
-    await shell.exec('git pull', {cwd: path.resolve(deployPath, projectPath)})
-    // console.log('拉取成功')
-    // 删除.npmrc文件
+    let errorMsg = ''
+    let finished = false
     try {
-        await myDelete(path.resolve(deployPath, projectPath, '.npmrc'))
-        await myDelete(path.resolve(deployPath, projectPath, 'package-lock.json'))
-    } catch (e) {
-        console.log(e)
-    }
-    await shell.exec('npm install', {cwd: path.resolve(deployPath, projectPath)})
-    // console.log('正在打包...')
-    await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(deployPath, projectPath)})
-    // console.log('打包成功')
-    try {
+        console.log('路径=>', path.resolve(deployPath, projectPath))
+        // shell.cd(path.resolve(deployPath, './' + project.name))
+        errorMsg += await shell.exec('git checkout .', {cwd: path.resolve(deployPath, projectPath)}).stderr + '<br>'
+        await isError(errorMsg)
+        errorMsg += 'git还原完成<br>'
+        errorMsg += await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(deployPath, projectPath)}).stderr + '<br>'
+        await isError(errorMsg)
+        errorMsg += 'git切换分支完成<br>'
+        errorMsg += await shell.exec('git pull', {cwd: path.resolve(deployPath, projectPath)}).stderr + '<br>'
+        await isError(errorMsg)
+        errorMsg += 'git拉取完成<br>'
+        try {
+            await myDelete(path.resolve(deployPath, projectPath, '.npmrc'))
+            await myDelete(path.resolve(deployPath, projectPath, 'package-lock.json'))
+        } catch (e) {
+            console.log(e)
+        }
+        errorMsg += await shell.exec('npm install', {cwd: path.resolve(deployPath, projectPath)}).stderr + '<br>'
+        await isError(errorMsg)
+        errorMsg += 'npm install完成<br>'
+        errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(deployPath, projectPath)}).stderr + '<br>'
+        await isError(errorMsg)
+        errorMsg += '打包完成<br>'
         // 压缩代码
         await zipDist(project)
+        errorMsg += '压缩代码成功<br>'
         // 上传服务器
         await uploadZipBySSH(project)
-        // console.log(mongoose.Types.ObjectId(project._id).toString())
+        errorMsg += '上传服务器成功<br>'
+        finished = true
     } catch (e) {
-        console.log(e)
+        errorMsg += e || '未知错误'
     }
-
+    let onlinePath = project.rootPath + '/' + project.path
+    onlinePath = onlinePath.replace('///', '/')
+    onlinePath = onlinePath.replace('//', '/')
+    request({
+        url: 'http://localhost:3210/add_record',
+        method: "POST",
+        json: true,
+        headers: {
+            "content-type": "application/json",
+        },
+        body: {
+            id: project._id.toString(),
+            name: project.name,
+            branch: project.branch,
+            ip: project.ip,
+            path: onlinePath,
+            log: errorMsg,
+            success: finished
+        }
+    }, function(error, response, body) {
+        if (!error && response.statusCode == 200) {
+            console.log(body) // 请求成功的处理逻辑
+        }
+    });
 }
 
 const runDeploy = (data) => {

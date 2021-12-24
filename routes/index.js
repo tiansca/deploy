@@ -54,7 +54,8 @@ router.post('/add_project', function(req, res, next) {
     server: req.body.server,
     path:req.body.path,
     build: req.body.build,
-    localPath: req.body.localPath
+    localPath: req.body.localPath,
+    outputDir: req.body.outputDir || 'dist'
   };
   project.findOne({name:postData.name, branch:postData.branch},function (err, data) {
     if(err){
@@ -213,23 +214,26 @@ router.get('/remove', function(req, res, next) {
     res.send({code: -1, msg: '缺少id'})
   }
 });
-router.get('/add_record', function(req, res, next) {
-  const id = req.query.id
+router.post('/add_record', function(req, res, next) {
+  const id = req.body.id
+  console.log(req.body)
   if (id) {
     record.create({
-        project_id: id,
-        name: req.query.name,
-        branch: req.query.branch,
-        ip: req.query.ip,
-        path: req.query.path
+      project_id: id,
+      name: req.body.name,
+      branch: req.body.branch,
+      ip: req.body.ip,
+      path: req.body.path,
+      log: req.body.log,
+      success: req.body.success
     }, function (err, data) {
-        if (!err) {
-            console.log('记录成功')
-            res.send({code: 0, msg: '记录成功'})
-        } else {
-          console.log('记录失败')
-          res.send({code: 1, msg: '记录失败'})
-        }
+      if (!err) {
+        console.log('记录成功')
+        res.send({code: 0, msg: '记录成功'})
+      } else {
+        console.log('记录失败')
+        res.send({code: 1, msg: '记录失败'})
+      }
     })
   } else {
     res.send({code: -1, msg: '缺少id'})
