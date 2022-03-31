@@ -207,7 +207,7 @@ router.get('/remove', function(req, res, next) {
       }else {
         res.send({code:0,msg:"删除成功"})
         console.log(data.name)
-        rmdirPromise(path.resolve(deployPath, './' + data.name))
+        rmdirPromise(path.resolve(deployPath, './' + data.localPath))
       }
     })
   } else {
