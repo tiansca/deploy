@@ -67,7 +67,7 @@ function simpleCopy(from, to) {
         console.log('开始', from, to)
         let isExists = await getStat(from);
         if (!isExists) {
-            reject()
+            reject(`目录：“${from}” 不存在`)
             return
         }
         fs.stat(from, async function (err, stat) {
