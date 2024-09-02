@@ -7,11 +7,16 @@ var clone = require('../utils/clone')
 var deploy = require('../utils/deploy')
 var runDeploy = require('../utils/deploy_work')
 var rmdirPromise = require('../utils/delete')
+const {v4:uuidv4} = require('uuid');
+const os = require('os');
 
 
 
 var { storagePath } = require('../config/path')
 const path = require('path')
+const saveShell = require("../utils/saveShell");
+const getFullPath = require("../utils/getPullPath");
+const readShell = require("../utils/readShell");
 
 /* GET home page. */
 router.get('/', function(req, res, next) {
@@ -30,7 +35,11 @@ router.post('/add_project', function(req, res, next) {
     build: req.body.build,
     deployPath: req.body.deployPath || '',
     directoryName: req.body.directoryName || '',
-    outputDir: req.body.outputDir || 'dist'
+    outputDir: req.body.outputDir || 'dist',
+    buildMode: req.body.buildMode || 'npm',
+    eventType: req.body.eventType || 'push',
+    buildShell: req.body.buildShell,
+    tagPrefixes: req.body.tagPrefixes || ''
   };
   project.findOne({name:postData.name, branch:postData.branch},function (err, data) {
     if(err){
@@ -210,18 +219,73 @@ router.post('/add_record', function(req, res, next) {
   }
 });
 router.get('/record_list', function(req, res, next) {
-  record.find({}, function (err,data) {
-    if(err){
-      res.send({code:1,msg:'查询失败'})
-    }else {
+  const pageSize = Number(req.query.pageSize) || 10
+  const pageIndex = Number(req.query.pageIndex) || 1
+  const projectId = req.query.projectId
+  const queryParams = {}
+  if (projectId) {
+    queryParams.project_id = projectId
+  }
+
+  record.find(queryParams, async function (err, data) {
+    if (err) {
+      res.send({code: 1, msg: '查询失败', error: err})
+    } else {
       for (let a = 0; a < data.length; a++) {
         data[a] = data[a].toObject()
         data[a].shijian = data[a].createTime.valueOf()
       }
-      res.send({code:0,data:data})
+      const count = await record.countDocuments(queryParams);
+      res.send({code: 0, data: {list: data, count: count}})
     }
-  }).sort({createTime: -1}).limit(100)
+  }).skip((pageIndex - 1) * pageSize).sort({createTime: -1}).limit(pageSize)
 });
+
+router.post('/add_shell', async function (req, res, next) {
+  const content = req.body.content
+  if (!content) {
+    res.send({code: -1, msg: '缺少内容'})
+    return
+  }
+  const platform = os.platform();
+  console.log(platform)
+  try {
+    console.log('保存shell')
+    const name = `${uuidv4()}.${platform === 'win32' ? 'cmd' : 'sh'}`
+    await saveShell(getFullPath(name, 'shell'), content)
+    res.send({code: 0, msg: '保存成功', data: {name}})
+  } catch (e) {
+    res.send({code: -1, msg: '保存失败', error: e})
+  }
+})
+router.post('/update_shell', async function (req, res, next) {
+  const content = req.body.content
+  const name = req.body.name
+  if (!content || !name) {
+    res.send({code: -1, msg: '缺少参数'})
+    return
+  }
+  try {
+    await saveShell(getFullPath(name, 'shell'), content)
+    res.send({code: 0, msg: '保存成功', data: {name}})
+  } catch (e) {
+    res.send({code: -1, msg: '保存失败', error: e})
+  }
+})
+
+router.get('/get_shell_content', async function (req, res, next) {
+  const name = req.query.name
+  if (!name) {
+    res.send({code: -1, msg: '缺少参数'})
+    return
+  }
+  try {
+    const content = await readShell(getFullPath(name, 'shell'))
+    res.send({code: 0, msg: '保存成功', data: {content}})
+  } catch (e) {
+    res.send({code: -1, msg: '保存失败', error: e})
+  }
+})
 
 
 module.exports = router;

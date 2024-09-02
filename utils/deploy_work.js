@@ -10,6 +10,7 @@ let { Worker, isMainThread, parentPort, workerData } = require('worker_threads')
 let request = require("request");
 const simpleCopy = require('./simpleCopy')
 const simpleDelete = require('./simpleDelete')
+const getFullPath = require("./getPullPath");
 // let mongoose=require('mongoose');
 //等待两秒
 // const wait2s = async () => {
@@ -117,10 +118,23 @@ function getStat(path){
 }
 
 const isError = (str) => {
-    if (str.indexOf('err') !== -1 || str.indexOf('ERR') !== -1) {
+    if (str.indexOf(' err') !== -1 || str.indexOf(' ERR') !== -1) {
         return Promise.reject(str)
     } else {
         return Promise.resolve()
+    }
+}
+
+// 运行shell脚本
+const runShell = async(project, shellType = 'buildShell') => {
+    console.log('开始执行shell脚本', project[shellType])
+    const directoryName = project.directoryName || project.name
+    // 在项目路径下运行shell脚本
+    const res = await shell.exec(getFullPath(project[shellType], 'shell'), {cwd: path.resolve(storagePath, directoryName)})
+    if (res.code === 0) {
+        return `执行脚本${project[shellType]}<br>` + res.stdout + '<br>'
+    } else {
+        return `执行脚本${project[shellType]}<br>` + res.stderr + '<br>'
     }
 }
 
@@ -137,7 +151,7 @@ async function deploy(project) {
     try {
         console.log('路径=>', path.resolve(storagePath, directoryName))
         errorMsg += await shell.exec('git checkout .', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
-        console.log('error =>', errorMsg)
+        console.log('还原', errorMsg)
         await isError(errorMsg)
         errorMsg += 'git还原完成<br>'
         errorMsg += await shell.exec('git pull', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
@@ -146,36 +160,43 @@ async function deploy(project) {
         errorMsg += await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
         await isError(errorMsg)
         errorMsg += 'git切换分支完成<br>'
-        // 打包
-        errorMsg += await shell.exec('npm install --unsafe-perm', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
-        await isError(errorMsg)
-        errorMsg += 'npm install 完成<br>'
-        errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
-        await isError(errorMsg)
-        errorMsg += '打包完成<br>'
-        console.log('error =>', errorMsg)
-        // console.log('正在打包...')
-        let deployPath = project.deployPath
-        if (deployPath) {
-            if (deployPath[0] === '/') {
-                deployPath = deployPath.replace('/', '')
-            }
-            const fullDeployPath = path.resolve(deployRootPath,'./', deployPath)
-            let isExists = await getStat(fullDeployPath);
-            //如果该路径且不是文件，返回true
-            console.log(deployRootPath, fullDeployPath)
-            if(!isExists || !isExists.isDirectory()){
-                console.log('项目路径不存在！')
-                throw '部署路径不存在'
-            } else {
-                // 清空部署目录
-                await simpleDelete(fullDeployPath)
-                // 复制打包文件到部署目录
-                let outputDir = project.outputDir || 'dist'
-                if (outputDir[0] === '/') {
-                    outputDir = outputDir.replace('/', '')
+        // 判断构建模式
+        if (project.buildMode === 'shell') {
+            errorMsg += await runShell(project, 'buildShell')
+            await isError(errorMsg)
+        } else {
+            // npm 部署前端
+            // 打包
+            errorMsg += await shell.exec('npm install --unsafe-perm', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
+            await isError(errorMsg)
+            errorMsg += 'npm install 完成<br>'
+            errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
+            await isError(errorMsg)
+            errorMsg += '打包完成<br>'
+            console.log('error =>', errorMsg)
+            // console.log('正在打包...')
+            let deployPath = project.deployPath
+            if (deployPath) {
+                if (deployPath[0] === '/') {
+                    deployPath = deployPath.replace('/', '')
                 }
-                await simpleCopy(path.resolve(storagePath, directoryName, './', outputDir), path.resolve(fullDeployPath))
+                const fullDeployPath = path.resolve(deployRootPath,'./', deployPath)
+                let isExists = await getStat(fullDeployPath);
+                //如果该路径且不是文件，返回true
+                console.log(deployRootPath, fullDeployPath)
+                if(!isExists || !isExists.isDirectory()){
+                    console.log('项目路径不存在！')
+                    throw '部署路径不存在'
+                } else {
+                    // 清空部署目录
+                    await simpleDelete(fullDeployPath)
+                    // 复制打包文件到部署目录
+                    let outputDir = project.outputDir || 'dist'
+                    if (outputDir[0] === '/') {
+                        outputDir = outputDir.replace('/', '')
+                    }
+                    await simpleCopy(path.resolve(storagePath, directoryName, './', outputDir), path.resolve(fullDeployPath))
+                }
             }
         }
         errorMsg += '部署完成<br>'
