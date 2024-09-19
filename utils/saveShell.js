@@ -7,6 +7,6 @@ const options = {
 };
 async function saveShell(path, content) {
     // 将content写入到path文件中
-    await fs.promises.writeFile(path, content, 'utf8')
+    await fs.promises.writeFile(path, content, options)
 }
 module.exports = saveShell

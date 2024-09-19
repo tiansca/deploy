@@ -118,7 +118,7 @@ function getStat(path){
 }
 
 const isError = (str) => {
-    if (str.indexOf(' err') !== -1 || str.indexOf(' ERR') !== -1) {
+    if (str.indexOf(' err') !== -1 || str.indexOf(' ERR') !== -1 || str.indexOf('Error') !== -1 || str.indexOf('error') !== -1 || str.indexOf('ERROR') !== -1) {
         return Promise.reject(str)
     } else {
         return Promise.resolve()
@@ -134,7 +134,7 @@ const runShell = async(project, shellType = 'buildShell') => {
     if (res.code === 0) {
         return `执行脚本${project[shellType]}<br>` + res.stdout + '<br>'
     } else {
-        return `执行脚本${project[shellType]}<br>` + res.stderr + '<br>'
+        return `执行脚本失败${project[shellType]}<br> error: ` + res.stderr + '<br>'
     }
 }
 
@@ -167,10 +167,10 @@ async function deploy(project) {
         } else {
             // npm 部署前端
             // 打包
-            errorMsg += await shell.exec('npm install --unsafe-perm', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
+            errorMsg += await shell.exec('npm install --unsafe-perm --legacy-peer-deps', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
             await isError(errorMsg)
             errorMsg += 'npm install 完成<br>'
-            errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
+            errorMsg += await shell.exec(project.build ? project.build : 'npm run build', {cwd: path.resolve(storagePath, directoryName)}).stderr + '<br>'
             await isError(errorMsg)
             errorMsg += '打包完成<br>'
             console.log('error =>', errorMsg)
@@ -186,17 +186,17 @@ async function deploy(project) {
                 console.log(deployRootPath, fullDeployPath)
                 if(!isExists || !isExists.isDirectory()){
                     console.log('项目路径不存在！')
-                    throw '部署路径不存在'
-                } else {
-                    // 清空部署目录
-                    await simpleDelete(fullDeployPath)
-                    // 复制打包文件到部署目录
-                    let outputDir = project.outputDir || 'dist'
-                    if (outputDir[0] === '/') {
-                        outputDir = outputDir.replace('/', '')
-                    }
-                    await simpleCopy(path.resolve(storagePath, directoryName, './', outputDir), path.resolve(fullDeployPath))
+                    // todo 创建文件夹
+                    await fs.promises.mkdir(fullDeployPath, {recursive: true})
                 }
+                // 清空部署目录
+                await simpleDelete(fullDeployPath)
+                // 复制打包文件到部署目录
+                let outputDir = project.outputDir || 'dist'
+                if (outputDir[0] === '/') {
+                    outputDir = outputDir.replace('/', '')
+                }
+                await simpleCopy(path.resolve(storagePath, directoryName, './', outputDir), path.resolve(fullDeployPath))
             }
         }
         errorMsg += '部署完成<br>'

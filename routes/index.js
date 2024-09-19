@@ -161,7 +161,9 @@ router.post('/update', function(req, res, next) {
     _id: req.body._id,
     deployPath: req.body.deployPath || '',
     directoryName: req.body.directoryName || '',
-    outputDir: req.body.outputDir || 'dist'
+    outputDir: req.body.outputDir || 'dist',
+    buildShell: req.body.buildShell,
+    buildMode: req.body.buildMode
   };
   project.findOne({_id:postData._id},function (err, data) {
     if(err || !data){
@@ -221,7 +223,7 @@ router.post('/add_record', function(req, res, next) {
 router.get('/record_list', function(req, res, next) {
   const pageSize = Number(req.query.pageSize) || 10
   const pageIndex = Number(req.query.pageIndex) || 1
-  const projectId = req.query.projectId
+  const projectId = req.query.project_id
   const queryParams = {}
   if (projectId) {
     queryParams.project_id = projectId

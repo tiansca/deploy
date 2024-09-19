@@ -1,8 +1,13 @@
 var mongoose = require('mongoose');
-var url ="mongodb://root:tianshicong@localhost:27017/deploy";
+var url ="mongodb://root:tianshicong@mongo:27017/deploy";
 // var url ="mongodb://tiansc:tianshicong@localhost:27017/deploy";
 mongoose.set('useCreateIndex', true)
-mongoose.connect(url);
+try {
+    mongoose.connect(url);
+} catch (error) {
+    console.log(error)
+}
+
 var db = mongoose.connection;
 // 连接成功
 db.on('open', function(){
