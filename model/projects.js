@@ -21,7 +21,12 @@ var projectSchema = new Schema({
     path: String,
     build: String,
     localPath: String,
-    outputDir: String
+    outputDir: String,
+    buildMode: String, // 构建模式，npm, shell
+    buildShell: String, // 构建脚本
+    eventType: String, // 响应git事件类型，push,tag
+    tagPrefixes: String, // tag前缀，为空所有tag都响应
+    startShell: String // 启动脚本
 }, {
     versionKey: false,
     timestamps: { createdAt: 'createTime', updatedAt: 'updateTime' }

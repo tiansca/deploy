@@ -1,5 +1,5 @@
 const shell = require('shelljs')
-var deployPath = require('../config/path')
+var { deployRootPath, storagePath} = require('../config/path')
 const zipFile = require('compressing')
 const node_ssh = require('node-ssh') // ssh连接服务器
 const SSH = new node_ssh()
@@ -8,6 +8,8 @@ const fs = require('fs')
 let { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 let request = require("request");
 const myDelete = require('./delete')
+const getFullPath = require("./getPullPath");
+const readShell = require('./readShell')
 // let mongoose=require('mongoose');
 
 
@@ -24,8 +26,8 @@ const zipDist = async(project) => {
     if (outputDir[0] === '/') {
         outputDir = outputDir.replace('/', '')
     }
-    const distDir = path.resolve(deployPath, './' + (project.localPath || project.name), './', outputDir) // 待打包
-    const distZipPath = path.resolve(deployPath, './' + (project.localPath || project.name), './dist.zip')
+    const distDir = path.resolve(storagePath, './' + (project.localPath || project.name), './', outputDir) // 待打包
+    const distZipPath = path.resolve(storagePath, './' + (project.localPath || project.name), './dist.zip')
     console.log('压缩...')
     try {
         await zipFile.zip.compressDir(distDir, distZipPath)
@@ -73,7 +75,9 @@ const connectSSH = async(project) => {
  */
 const runCommand = async(command, path) => {
     // eslint-disable-next-line no-unused-vars
+    console.log('执行命令', command, path)
     const result = await SSH.exec(command, [], { cwd: path })
+    return result
     // defaultLog(result);
 }
 
@@ -87,22 +91,34 @@ const clearOldFile = async(path) => {
 
 // 传送zip文件到服务器
 const uploadZipBySSH = async(project) => {
-    if (!project.path || project.path === '/' || !project.rootPath || project.rootPath === '/') {
-        console.log('路径不完整', project.path, project.rootPath)
+    if (!project.path || project.path === '/') {
+        console.log('路径不完整', project.path)
         return false
     }
-    let onlinePath = project.rootPath + '/' + project.path
+    let onlinePath = project.path
     onlinePath = onlinePath.replace('///', '/')
     onlinePath = onlinePath.replace('//', '/')
-    console.log('onlinePath', onlinePath)
+    console.log('onlinePath', onlinePath, project)
     // 连接ssh
     await connectSSH(project)
-    // 线上目标文件清空
-    console.log('正在清空...')
-    await clearOldFile(onlinePath)
-    console.log('正在上传...')
-    const distZipPath = path.resolve(deployPath, './' + (project.localPath || project.name), './dist.zip')
+    // 创建目录
+    await runCommand(`mkdir -p ${onlinePath}`)
     try {
+        // 判断远程是否支持 unzip命令
+        const isUnzip = await runCommand(`command -v unzip`)
+        if (!isUnzip) {
+            if (await runCommand(`command -v yum`)) {
+                await runCommand(`yum install unzip -y`)
+            } else if (await runCommand(`command -v apt-get`)) {
+                await runCommand(`apt-get install unzip -y`)
+            }
+        }
+        // 线上目标文件清空
+        console.log('正在清空...')
+        await clearOldFile(onlinePath)
+        console.log('正在上传...')
+        const distZipPath = path.resolve(storagePath, './' + (project.localPath || project.name), './dist.zip')
+        console.log('distZipPath', distZipPath)
         await SSH.putFiles([{ local: distZipPath, remote: onlinePath + '/dist.zip' }]) // local 本地 ; remote 服务器 ;
         await runCommand('unzip ./dist.zip', onlinePath) // 解压
         await runCommand(`rm -rf ${onlinePath}/dist.zip`, onlinePath) // 解压完删除线上压缩包
@@ -112,10 +128,9 @@ const uploadZipBySSH = async(project) => {
         await runCommand(`mv -f ${onlinePath}/dist/*  ${onlinePath}`, onlinePath)
         await runCommand(`rm -rf ${onlinePath}/dist`, onlinePath) // 移出后删除 dist 文件夹
         SSH.dispose() // 断开连接
-        console.log('部署成功！')
         const id = project._id.toString()
         console.log(id)
-        return Promise.resolve('部署成功')
+        return Promise.resolve('上传成功')
     } catch (error) {
         console.log(error)
         return Promise.reject(error)
@@ -145,52 +160,117 @@ const isError = (str) => {
     }
 }
 
+const runShell = async(project, shellType = 'buildShell') => {
+    console.log('开始执行shell脚本', project[shellType])
+    const directoryName = project.directoryName || project.name
+    // 在项目路径下运行shell脚本
+    const res = await shell.exec(getFullPath(project[shellType], 'shell'), {cwd: path.resolve(storagePath, directoryName)})
+    if (res.code === 0) {
+        return `执行脚本${project[shellType]}<br>` + res.stdout + '<br>'
+    } else {
+        return `执行脚本失败${project[shellType]}<br> error: ` + res.stderr + '<br>'
+    }
+}
+
+// 执行远程脚本
+const runRemoteShell = async(localPath, remotePath) => {
+    console.log('runRemoteShell')
+    let shellPath = remotePath + '/run.sh'
+    shellPath = shellPath.replace('//', '/')
+    await SSH.putFiles([{ local: localPath, remote: shellPath }])
+    // 设置脚本文件执行权限
+    await SSH.exec('chmod', ['777', shellPath])
+    let res = ''
+    // 执行脚本文件
+    try {
+        res = await runCommand('./run.sh', remotePath )
+    }catch (e) {
+        console.log(e)
+    }
+    // 断开连接
+    await SSH.dispose()
+    return '执行远程脚本成功<br>' + res
+}
+
 async function deploy(project) {
     // console.log('拿到数据=>', project)
     const projectPath = project.localPath || project.name
-    let isExists = await getStat(path.resolve(deployPath, projectPath));
+    console.log('开始部署...', storagePath, projectPath)
+    let isExists = await getStat(path.resolve(storagePath, projectPath));
     //如果该路径且不是文件，返回true
     if(!isExists || !isExists.isDirectory()){
         console.log('项目路径不存在！')
-        return true;
+        return Promise.reject('项目路径不存在！')
     }
     let errorMsg = ''
     let finished = false
     try {
-        console.log('路径=>', path.resolve(deployPath, projectPath))
-        // shell.cd(path.resolve(deployPath, './' + project.name))
-        errorMsg += await shell.exec('git checkout .', {cwd: path.resolve(deployPath, projectPath)}).stderr + '<br>'
+        console.log('路径=>', path.resolve(storagePath, projectPath))
+        // shell.cd(path.resolve(deployRootPath, './' + project.name))
+        errorMsg += await shell.exec('git checkout .', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
         await isError(errorMsg)
         errorMsg += 'git还原完成<br>'
-        errorMsg += await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(deployPath, projectPath)}).stderr + '<br>'
+        errorMsg += await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
         await isError(errorMsg)
         errorMsg += 'git切换分支完成<br>'
-        errorMsg += await shell.exec('git pull', {cwd: path.resolve(deployPath, projectPath)}).stderr + '<br>'
+        errorMsg += await shell.exec('git pull', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
         await isError(errorMsg)
         errorMsg += 'git拉取完成<br>'
-        try {
-            await myDelete(path.resolve(deployPath, projectPath, '.npmrc'))
-            await myDelete(path.resolve(deployPath, projectPath, 'package-lock.json'))
-        } catch (e) {
-            console.log(e)
+        // try {
+        //     await myDelete(path.resolve(deployRootPath, projectPath, '.npmrc'))
+        //     await myDelete(path.resolve(deployRootPath, projectPath, 'package-lock.json'))
+        // } catch (e) {
+        //     console.log(e)
+        // }
+        // 判断path是否为空，或者只包含一个/
+        if (!project.path || project.path === '/' || project.path.split('/').length === 1 || project.path.indexOf('/') !== 0) {
+            errorMsg += 'error：远程部署路径有误，请修改，必须包含两个及以上“/”，且以“/”开头'
+            await isError(errorMsg)
         }
-        errorMsg += await shell.exec('npm install', {cwd: path.resolve(deployPath, projectPath)}).stderr + '<br>'
-        await isError(errorMsg)
-        errorMsg += 'npm install完成<br>'
-        errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(deployPath, projectPath)}).stderr + '<br>'
-        await isError(errorMsg)
-        errorMsg += '打包完成<br>'
-        // 压缩代码
-        await zipDist(project)
-        errorMsg += '压缩代码成功<br>'
-        // 上传服务器
-        await uploadZipBySSH(project)
-        errorMsg += '上传服务器成功<br>'
-        finished = true
+        if (project.buildMode === 'npm') {
+            console.log('开始执行npm命令')
+            // 若有打包命令则执行，否则默认npm run build:stage
+            errorMsg += await shell.exec('npm install', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+            await isError(errorMsg)
+            errorMsg += 'npm install完成<br>'
+            errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+            await isError(errorMsg)
+            errorMsg += '打包完成<br>'
+            // 压缩代码
+            await zipDist(project)
+            errorMsg += '压缩代码成功<br>'
+            // 上传服务器
+            await uploadZipBySSH(project)
+            errorMsg += '上传服务器成功<br>'
+            finished = true
+            console.log('npm 部署完成')
+        } else {
+            // 运行shell脚本
+            if(project.buildShell) {
+                errorMsg += await runShell(project, 'buildShell')
+                console.log('shell脚本执行完成-build', errorMsg)
+                await isError(errorMsg)
+            }
+            // 上传服务器
+            await zipDist(project)
+            await uploadZipBySSH(project)
+            errorMsg += '上传服务器成功<br>'
+            // 执行启动脚本
+            if (project.startShell) {
+                // 获取shell内容
+                // const content = await readShell(getFullPath(project['startShell'], 'shell'))
+                // if (content) {
+                await connectSSH(project)
+                errorMsg += await runRemoteShell(getFullPath(project['startShell'], 'shell'), project.path)
+                // }
+            }
+            finished = true
+        }
+
     } catch (e) {
         errorMsg += e || '未知错误'
     }
-    let onlinePath = project.rootPath + '/' + project.path
+    let onlinePath = project.path
     onlinePath = onlinePath.replace('///', '/')
     onlinePath = onlinePath.replace('//', '/')
     request({

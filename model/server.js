@@ -7,7 +7,6 @@ var serverSchema = new Schema({
     password: String,
     privateKey: String,
     connectionType: Number, // 0:密码  1:密钥
-    rootPath: String,
     createTime:{
         type:Date,
         default:Date.now

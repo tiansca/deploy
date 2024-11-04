@@ -8,11 +8,16 @@ var clone = require('../utils/clone')
 var deploy = require('../utils/deploy')
 var runDeploy = require('../utils/deploy_work')
 var rmdirPromise = require('../utils/delete')
+const {v4:uuidv4} = require('uuid');
+const os = require('os');
 
 
 
-var deployPath = require('../config/path')
+var {storagePath} = require('../config/path')
 const path = require('path')
+const readShell = require("../utils/readShell");
+const getFullPath = require("../utils/getPullPath");
+const saveShell = require("../utils/saveShell");
 
 const getServer = async (project) => {
     return new Promise(function (resolve, reject) {
@@ -26,7 +31,7 @@ const getServer = async (project) => {
                     project.ip = server.ip
                     project.username = server.username
                     project.password = server.password
-                    project.rootPath = server.rootPath
+                    // project.rootPath = server.rootPath
                     project.privateKey = server.privateKey
                     project.connectionType = server.connectionType
                     resolve(project)
@@ -54,8 +59,13 @@ router.post('/add_project', function(req, res, next) {
     server: req.body.server,
     path:req.body.path,
     build: req.body.build,
-    localPath: req.body.localPath,
-    outputDir: req.body.outputDir || 'dist'
+    localPath: req.body.localPath || req.body.name,
+    outputDir: req.body.outputDir || 'dist',
+    buildMode: req.body.buildMode || 'npm',
+    eventType: req.body.eventType || 'push',
+    buildShell: req.body.buildShell,
+    startShell: req.body.startShell,
+    tagPrefixes: req.body.tagPrefixes || ''
   };
   project.findOne({name:postData.name, branch:postData.branch},function (err, data) {
     if(err){
@@ -180,7 +190,12 @@ router.post('/update', function(req, res, next) {
     server:req.body.server,
     _id: req.body._id,
     build: req.body.build,
-    localPath: req.body.localPath
+    localPath: req.body.localPath || req.body.name,
+    buildMode: req.body.buildMode,
+    eventType: req.body.eventType,
+    buildShell: req.body.buildShell,
+    startShell: req.body.startShell,
+    tagPrefixes: req.body.tagPrefixes
   };
   project.findOne({_id:postData._id},function (err, data) {
     if(err || !data){
@@ -207,7 +222,7 @@ router.get('/remove', function(req, res, next) {
       }else {
         res.send({code:0,msg:"删除成功"})
         console.log(data.name)
-        rmdirPromise(path.resolve(deployPath, './' + data.localPath))
+        rmdirPromise(path.resolve(storagePath, './' + data.localPath))
       }
     })
   } else {
@@ -256,13 +271,13 @@ router.post('/add_server', function (req, res, next) {
     var postData = {
         name: req.body.name,
         ip: req.body.ip,
-        rootPath:req.body.rootPath,
+        // rootPath:req.body.rootPath,
         password:req.body.password,
         connectionType:req.body.connectionType,
         privateKey:req.body.privateKey,
         username: req.body.username
     };
-    server.findOne({ip:postData.name, rootPath:postData.rootPath},function (err, data) {
+    server.findOne({ip:postData.name},function (err, data) {
         if(err){
             res.send({code:-1,msg:'服务器错误'})
         }else if (data) {
@@ -282,7 +297,7 @@ router.post('/update_server', function(req, res, next) {
     var postData = {
         name: req.body.name,
         ip: req.body.ip,
-        rootPath:req.body.rootPath,
+        // rootPath:req.body.rootPath,
         password:req.body.password,
         username: req.body.username,
         connectionType:req.body.connectionType,
@@ -349,6 +364,50 @@ router.get('/change_server_status', function(req, res, next) {
         res.send({code: -1, msg: '缺少id'})
     }
 });
+router.post('/add_shell', async function (req, res, next) {
+    const content = req.body.content
+    if (!content) {
+        res.send({code: -1, msg: '缺少内容'})
+        return
+    }
+    const platform = os.platform();
+    console.log(platform)
+    try {
+        console.log('保存shell')
+        const name = `${uuidv4()}.${platform === 'win32' ? 'cmd' : 'sh'}`
+        await saveShell(getFullPath(name, 'shell'), content)
+        res.send({code: 0, msg: '保存成功', data: {name}})
+    } catch (e) {
+        res.send({code: -1, msg: '保存失败', error: e})
+    }
+})
+router.post('/update_shell', async function (req, res, next) {
+    const content = req.body.content
+    const name = req.body.name
+    if (!content || !name) {
+        res.send({code: -1, msg: '缺少参数'})
+        return
+    }
+    try {
+        await saveShell(getFullPath(name, 'shell'), content)
+        res.send({code: 0, msg: '保存成功', data: {name}})
+    } catch (e) {
+        res.send({code: -1, msg: '保存失败', error: e})
+    }
+})
 
+router.get('/get_shell_content', async function (req, res, next) {
+    const name = req.query.name
+    if (!name) {
+        res.send({code: -1, msg: '缺少参数'})
+        return
+    }
+    try {
+        const content = await readShell(getFullPath(name, 'shell'))
+        res.send({code: 0, msg: '保存成功', data: {content}})
+    } catch (e) {
+        res.send({code: -1, msg: '保存失败', error: e})
+    }
+})
 
 module.exports = router;
