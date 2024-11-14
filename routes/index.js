@@ -18,6 +18,7 @@ const path = require('path')
 const readShell = require("../utils/readShell");
 const getFullPath = require("../utils/getPullPath");
 const saveShell = require("../utils/saveShell");
+const mongoose = require("mongoose");
 
 const getServer = async (project) => {
     return new Promise(function (resolve, reject) {
@@ -94,27 +95,57 @@ router.post('/add_project', function(req, res, next) {
   // res.send(req.body)
 });
 router.post('/deploy', function(req, res, next) {
-  console.log('分支=>', req.body.ref)  // refs/heads/dev
-  console.log('项目=>', req.body.project.name)
-  if (!(req.body.project && req.body.project.name) || !req.body.ref) {
-    res.send({data: -2, msg: '参数缺失'})
+  console.log('分支或tag=>', req.body.ref)  // refs/heads/dev
+  console.log('项目=>', req.body?.project?.name)
+  if (!(req.body?.project && req.body.project.name) || !req.body?.ref) {
+    res.send({data: -2, msg: '参数缺失', body: req.body})
     return
   }
-  const projectName = req.body.project.name
-  const branch = req.body.ref.replace('refs/heads/', '')
-  project.findOne({name:projectName, branch:branch}, async function (err, data) {
+  const projectName = req.body?.project?.name
+  const searchParams = {name:projectName}
+  let tagName = ''
+  // 判断事件类型
+  if (req.body.event_name === 'tag_push') {
+    tagName = req.body.ref.replace('refs/tags/', '')
+    searchParams.eventType = 'tag'
+  } else if (req.body.event_name === 'push') {
+    searchParams.branch = req.body.ref.replace('refs/heads/', '')
+    searchParams.eventType = 'push'
+  } else {
+    res.send({data: -3, msg: '不支持的事件类型', body: req.body})
+    return
+  }
+  project.find(searchParams, async function (err, data) {
     if (err || !data) {
       console.log('项目不存在')
       res.send({data: -1, msg: '项目不存在'})
     } else {
-      if (data.status) {
+      const list = data
+      if (!list.length) {
+        console.log('没有找到项目')
+        res.send({data: -4, msg: '没有找到项目'})
+        return
+      }
+      let projectData = list[0]
+      // 判断事件有无tagName
+      if (tagName) {
+        // 判断tagName是否在tagPrefixes中
+        for (const item of list) {
+          if (tagName.startsWith(item.tagPrefixes)) {
+            projectData = item
+            break
+          }
+        }
+     }
+      if (projectData.status) {
         res.send({code: 0, msg: '启动部署'})
         try {
-          console.log('项目信息=>', data)
           // deploy(data)
-          data = data.toObject()
-          data._id = data._id.toString()
-          const newData = await getServer(data)
+          projectData = projectData.toObject()
+          projectData._id = projectData._id.toString()
+          projectData.tagName = tagName
+          const newData = await getServer(projectData)
+          console.log('project', newData)
           runDeploy(newData)
         } catch (e) {
           console.log(e)
@@ -122,7 +153,6 @@ router.post('/deploy', function(req, res, next) {
       } else {
         console.log('项目没有开启自动部署')
       }
-
     }
   })
 });
@@ -222,7 +252,11 @@ router.get('/remove', function(req, res, next) {
       }else {
         res.send({code:0,msg:"删除成功"})
         console.log(data.name)
-        rmdirPromise(path.resolve(storagePath, './' + data.localPath))
+        try {
+          rmdirPromise(path.resolve(storagePath, './' + data.localPath))
+        } catch (e) {
+          console.log(e)
+        }
       }
     })
   } else {
@@ -255,7 +289,12 @@ router.post('/add_record', function(req, res, next) {
   }
 });
 router.get('/record_list', function(req, res, next) {
-  record.find({}, function (err,data) {
+  const id = req.query.project_id
+  if (!id) {
+    res.send({code: -1, msg: '缺少id'})
+    return
+  }
+  record.find({project_id: id}, function (err,data) {
     if(err){
       res.send({code:1,msg:'查询失败'})
     }else {

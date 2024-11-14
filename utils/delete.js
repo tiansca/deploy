@@ -17,7 +17,7 @@ function rmdirPromise(filePath) {
     return new Promise(async (resolve, reject) => {
         let isExists = await getStat(filePath);
         if (!isExists) {
-            reject()
+            reject('目录不存在')
             return
         }
         fs.stat(filePath, function (err, stat) {

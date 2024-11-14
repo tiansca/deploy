@@ -10,6 +10,7 @@ let request = require("request");
 const myDelete = require('./delete')
 const getFullPath = require("./getPullPath");
 const readShell = require('./readShell')
+const rmdirPromise = require("./delete");
 // let mongoose=require('mongoose');
 
 
@@ -83,6 +84,9 @@ const runCommand = async(command, path) => {
 
 // 清空线上目标目录里的旧文件
 const clearOldFile = async(path) => {
+    if (!path || path === '/' || path === './' || path.length < 10) {
+        return Promise.reject('error：路径不完整')
+    }
     const commands = ['ls', 'rm -rf *']
     await Promise.all(commands.map(async(it) => {
         return await runCommand(it, path)
@@ -193,7 +197,6 @@ const runRemoteShell = async(localPath, remotePath) => {
 }
 
 async function deploy(project) {
-    // console.log('拿到数据=>', project)
     const projectPath = project.localPath || project.name
     console.log('开始部署...', storagePath, projectPath)
     let isExists = await getStat(path.resolve(storagePath, projectPath));
@@ -210,7 +213,12 @@ async function deploy(project) {
         errorMsg += await shell.exec('git checkout .', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
         await isError(errorMsg)
         errorMsg += 'git还原完成<br>'
-        errorMsg += await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+        errorMsg += await shell.exec('git pull', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+        if (project.eventType === 'push') {
+            errorMsg += await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+        } else {
+            errorMsg += await shell.exec('git checkout tags/' + project.tagName, {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+        }
         await isError(errorMsg)
         errorMsg += 'git切换分支完成<br>'
         errorMsg += await shell.exec('git pull', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
@@ -224,10 +232,20 @@ async function deploy(project) {
         // }
         // 判断path是否为空，或者只包含一个/
         if (!project.path || project.path === '/' || project.path.split('/').length === 1 || project.path.indexOf('/') !== 0) {
-            errorMsg += 'error：远程部署路径有误，请修改，必须包含两个及以上“/”，且以“/”开头'
+            errorMsg += 'error：远程部署路径有误，请修改，必须包含两个及以上“/”，且以“/”开头' + '<br>'
             await isError(errorMsg)
         }
         if (project.buildMode === 'npm') {
+            // 删除node_modules目录
+            // try{
+            //     await rmdirPromise(path.resolve(storagePath, projectPath, 'node_modules'))
+            // } catch (e) {
+            //     console.log('尝试删除node_modules失败=>', e)
+            // }
+            //
+            // // 清空npm缓存
+            // await shell.exec('npm cache clean --force', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+
             console.log('开始执行npm命令')
             // 若有打包命令则执行，否则默认npm run build:stage
             errorMsg += await shell.exec('npm install', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
