@@ -4,6 +4,8 @@ FROM node:22.1.0
 # 安装git
 RUN apt-get update && apt-get install -y git
 
+# 创建zip目录
+RUN mkdir -p /home/deploy/zip
 
 # 设置工作目录
 WORKDIR /app

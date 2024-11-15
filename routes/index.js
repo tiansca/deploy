@@ -138,7 +138,6 @@ router.post('/deploy', function(req, res, next) {
         }
      }
       if (projectData.status) {
-        res.send({code: 0, msg: '启动部署'})
         try {
           // deploy(data)
           projectData = projectData.toObject()
@@ -146,12 +145,15 @@ router.post('/deploy', function(req, res, next) {
           projectData.tagName = tagName
           const newData = await getServer(projectData)
           console.log('project', newData)
-          runDeploy(newData)
+          const deployRes = await runDeploy(newData)
+          res.send({code: 0, msg: deployRes || '部署流程执行完毕'})
         } catch (e) {
           console.log(e)
+          res.send({code: -1, msg: e || '部署失败'})
         }
       } else {
         console.log('项目没有开启自动部署')
+        res.send({data: -2, msg: '项目没有开启自动部署'})
       }
     }
   })

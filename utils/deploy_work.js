@@ -1,5 +1,5 @@
 const shell = require('shelljs')
-var { deployRootPath, storagePath} = require('../config/path')
+var { deployRootPath, storagePath, zipPath} = require('../config/path')
 const zipFile = require('compressing')
 const node_ssh = require('node-ssh') // ssh连接服务器
 const SSH = new node_ssh()
@@ -28,7 +28,16 @@ const zipDist = async(project) => {
         outputDir = outputDir.replace('/', '')
     }
     const distDir = path.resolve(storagePath, './' + (project.localPath || project.name), './', outputDir) // 待打包
-    const distZipPath = path.resolve(storagePath, './' + (project.localPath || project.name), './dist.zip')
+    // 在zipPath下创建项目压缩包文件夹
+    const projectZipPath = path.resolve(zipPath, './' + (project.localPath || project.name))
+    // 判断项目压缩包文件夹是否存在
+    try {
+        await fs.promises.access(projectZipPath)
+    } catch (error) {
+        console.log('项目压缩包文件夹不存在，创建中...')
+        await fs.promises.mkdir(projectZipPath)
+    }
+    const distZipPath = path.resolve(zipPath, './' + (project.localPath || project.name), './dist.zip')
     console.log('压缩...')
     try {
         await zipFile.zip.compressDir(distDir, distZipPath)
@@ -93,6 +102,14 @@ const clearOldFile = async(path) => {
     }))
 }
 
+const sleep = (time) => {
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            resolve()
+        }, time)
+    })
+}
+
 // 传送zip文件到服务器
 const uploadZipBySSH = async(project) => {
     if (!project.path || project.path === '/') {
@@ -121,9 +138,10 @@ const uploadZipBySSH = async(project) => {
         console.log('正在清空...')
         await clearOldFile(onlinePath)
         console.log('正在上传...')
-        const distZipPath = path.resolve(storagePath, './' + (project.localPath || project.name), './dist.zip')
+        const distZipPath = path.resolve(zipPath, './' + (project.localPath || project.name), './dist.zip')
         console.log('distZipPath', distZipPath)
         await SSH.putFiles([{ local: distZipPath, remote: onlinePath + '/dist.zip' }]) // local 本地 ; remote 服务器 ;
+        console.log('正在解压...')
         await runCommand('unzip ./dist.zip', onlinePath) // 解压
         await runCommand(`rm -rf ${onlinePath}/dist.zip`, onlinePath) // 解压完删除线上压缩包
         // 将目标目录的dist里面文件移出到目标文件
@@ -158,9 +176,9 @@ function getStat(path){
 const isError = (str) => {
     // console.log('msg', str)
     if (str.indexOf('err') !== -1 || str.indexOf('ERR') !== -1) {
-        return Promise.reject(str)
+        return Promise.reject('错误，终止')
     } else {
-        return Promise.resolve()
+        return ''
     }
 }
 
@@ -257,6 +275,7 @@ async function deploy(project) {
             // 压缩代码
             await zipDist(project)
             errorMsg += '压缩代码成功<br>'
+            await sleep(2000)
             // 上传服务器
             await uploadZipBySSH(project)
             errorMsg += '上传服务器成功<br>'
@@ -272,6 +291,7 @@ async function deploy(project) {
             // 上传服务器
             await zipDist(project)
             await uploadZipBySSH(project)
+            await isError(errorMsg)
             errorMsg += '上传服务器成功<br>'
             // 执行启动脚本
             if (project.startShell) {
@@ -312,34 +332,64 @@ async function deploy(project) {
             console.log(body) // 请求成功的处理逻辑
         }
     });
+    return Promise.resolve(errorMsg)
 }
 
 const runDeploy = (data) => {
-    if (isMainThread) {
-        // console.log('传递数据=>', data)
-        const worker = new Worker(__filename, {
-            // workerData: JSON.parse(JSON.stringify(data._doc))
-            workerData: data
-        });
-        worker.on('message', (d) => {
-            console.log('parent receive message:', d);
-        });
-        worker.on('error', (e) => {
-            console.error('parent receive error', e);
-        });
-        worker.on('exit', (code) => {
-            if (code !== 0)
-                console.error(new Error(`工作线程使用退出码 ${code} 停止`));
-        });
-    }
+    return new Promise(function (resolve, reject) {
+        if (isMainThread) {
+            // console.log('传递数据=>', data)
+            const worker = new Worker(__filename, {
+                // workerData: JSON.parse(JSON.stringify(data._doc))
+                workerData: data
+            });
+            worker.on('message', (d) => {
+                console.log('parent receive message:', d);
+            });
+            worker.on('error', (e) => {
+                console.error('parent receive error', e);
+                reject(e)
+            });
+            worker.on('exit', (code) => {
+                resolve(deployRes)
+                if (code !== 0)
+                    console.error(new Error(`工作线程使用退出码 ${code} 停止`));
+            });
+        } else {
+            resolve(deployRes)
+        }
+    })
+    // if (isMainThread) {
+    //     // console.log('传递数据=>', data)
+    //     const worker = new Worker(__filename, {
+    //         // workerData: JSON.parse(JSON.stringify(data._doc))
+    //         workerData: data
+    //     });
+    //     worker.on('message', (d) => {
+    //         console.log('parent receive message:', d);
+    //     });
+    //     worker.on('error', (e) => {
+    //         console.error('parent receive error', e);
+    //     });
+    //     worker.on('exit', (code) => {
+    //         if (code !== 0)
+    //             console.error(new Error(`工作线程使用退出码 ${code} 停止`));
+    //     });
     // } else {
-    //     console.log(workerData)
-    //     deploy(workerData)
+    //     return deployRes
     // }
 }
-
+let deployRes = ''
 if (!isMainThread) {
-    deploy(workerData)
+    async function aDeploy() {
+        try {
+            deployRes = await deploy(workerData)
+        } catch (e) {
+            deployRes = e
+        }
+        return runDeploy()
+    }
+    return aDeploy()
 }
 
 module.exports = runDeploy;
