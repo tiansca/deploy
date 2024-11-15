@@ -74,10 +74,10 @@ const connectSSH = async(project) => {
  *
  * @param {String} command 命令操作 如 ls
  */
-const runCommand = async(command, path) => {
+const runCommand = async(command, s_path) => {
     // eslint-disable-next-line no-unused-vars
-    console.log('执行命令', command, path)
-    const result = await SSH.exec(command, [], { cwd: path })
+    console.log('执行命令', command, s_path)
+    const result = await SSH.exec(command, [], { cwd: s_path })
     return result
     // defaultLog(result);
 }
