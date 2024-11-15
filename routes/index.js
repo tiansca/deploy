@@ -19,6 +19,7 @@ const readShell = require("../utils/readShell");
 const getFullPath = require("../utils/getPullPath");
 const saveShell = require("../utils/saveShell");
 const mongoose = require("mongoose");
+const uploadZipBySSH = require("../utils/uploadZipBySSH");
 
 const getServer = async (project) => {
     return new Promise(function (resolve, reject) {
@@ -449,6 +450,28 @@ router.get('/get_shell_content', async function (req, res, next) {
     } catch (e) {
         res.send({code: -1, msg: '保存失败', error: e})
     }
+})
+
+// 上传zip
+router.get('/upload_zip', async function (req, res, next) {
+  const project_id = req.query.project_id
+  if (!project_id) {
+    res.send({code: -1, msg: '缺少参数'})
+    return
+  }
+  // 获取项目信息
+  project.findById(project_id, async function (err, data){
+    if (err || !data) {
+      res.send({code: -1, msg: '项目不存在'})
+      return
+    }
+    console.log(data.toObject())
+    const projectData = data.toObject()
+    projectData._id = data._id.toString()
+    const newData = await getServer(projectData)
+    await uploadZipBySSH(newData)
+    res.send(newData)
+  })
 })
 
 module.exports = router;
