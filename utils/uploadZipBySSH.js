@@ -1,7 +1,7 @@
 const path = require('path')
 const {zipPath} = require('../config/path')
-const node_ssh = require('node-ssh') // ssh连接服务器
-const SSH = new node_ssh()
+const {NodeSSH} = require('node-ssh') // ssh连接服务器
+const SSH = new NodeSSH()
 
 const connectSSH = async(project) => {
   try {

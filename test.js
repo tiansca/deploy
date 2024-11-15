@@ -1,7 +1,7 @@
 const path = require("path");
-const node_ssh = require('node-ssh')
+const {NodeSSH} = require('node-ssh')
 const shell = require("shelljs"); // ssh连接服务器
-const SSH = new node_ssh()
+const SSH = new NodeSSH()
 
 const connectSSH = async() => {
   try {

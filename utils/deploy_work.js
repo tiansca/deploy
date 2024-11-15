@@ -1,8 +1,8 @@
 const shell = require('shelljs')
 var { deployRootPath, storagePath, zipPath} = require('../config/path')
 const zipFile = require('compressing')
-const node_ssh = require('node-ssh') // ssh连接服务器
-const SSH = new node_ssh()
+const {NodeSSH} = require('node-ssh') // ssh连接服务器
+const SSH = new NodeSSH()
 const path = require('path')
 const fs = require('fs')
 let { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
