@@ -146,7 +146,7 @@ router.post('/deploy', function(req, res, next) {
           projectData.tagName = tagName
           const newData = await getServer(projectData)
           console.log('project', newData)
-          const deployRes = await runDeploy(newData)
+          const deployRes = runDeploy(newData)
           res.send({code: 0, msg: deployRes || '部署流程执行完毕'})
         } catch (e) {
           console.log(e)

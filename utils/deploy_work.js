@@ -387,9 +387,8 @@ if (!isMainThread) {
         } catch (e) {
             deployRes = e
         }
-        return runDeploy()
     }
-    return aDeploy()
+    aDeploy()
 }
 
 module.exports = runDeploy;
