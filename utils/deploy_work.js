@@ -336,7 +336,7 @@ async function deploy(project) {
 
 const runDeploy = (data) => {
     if (isMainThread) {
-        // console.log('传递数据=>', data)
+        console.log('启动新线程')
         const worker = new Worker(__filename, {
             // workerData: JSON.parse(JSON.stringify(data._doc))
             workerData: data
