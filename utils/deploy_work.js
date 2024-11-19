@@ -348,6 +348,9 @@ const runDeploy = (data) => {
             console.error('parent receive error', e);
         });
         worker.on('exit', (code) => {
+            if (timer) {
+                clearTimeout(timer)
+            }
             if (code !== 0) {
                 console.error(`工作线程使用退出码 ${code} 停止`);
             } else {
@@ -356,7 +359,7 @@ const runDeploy = (data) => {
 
         });
         // 超时自动停止
-        setTimeout(() => {
+        const timer = setTimeout(() => {
             worker.terminate()
         }, 10 * 60 * 1000)
     }
