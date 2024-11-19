@@ -336,59 +336,26 @@ async function deploy(project) {
 }
 
 const runDeploy = (data) => {
-    return new Promise(function (resolve, reject) {
-        if (isMainThread) {
-            // console.log('传递数据=>', data)
-            const worker = new Worker(__filename, {
-                // workerData: JSON.parse(JSON.stringify(data._doc))
-                workerData: data
-            });
-            worker.on('message', (d) => {
-                console.log('parent receive message:', d);
-            });
-            worker.on('error', (e) => {
-                console.error('parent receive error', e);
-                reject(e)
-            });
-            worker.on('exit', (code) => {
-                resolve(deployRes)
-                if (code !== 0)
-                    console.error(new Error(`工作线程使用退出码 ${code} 停止`));
-            });
-        } else {
-            resolve(deployRes)
-        }
-    })
-    // if (isMainThread) {
-    //     // console.log('传递数据=>', data)
-    //     const worker = new Worker(__filename, {
-    //         // workerData: JSON.parse(JSON.stringify(data._doc))
-    //         workerData: data
-    //     });
-    //     worker.on('message', (d) => {
-    //         console.log('parent receive message:', d);
-    //     });
-    //     worker.on('error', (e) => {
-    //         console.error('parent receive error', e);
-    //     });
-    //     worker.on('exit', (code) => {
-    //         if (code !== 0)
-    //             console.error(new Error(`工作线程使用退出码 ${code} 停止`));
-    //     });
-    // } else {
-    //     return deployRes
-    // }
-}
-let deployRes = ''
-if (!isMainThread) {
-    async function aDeploy() {
-        try {
-            deployRes = await deploy(workerData)
-        } catch (e) {
-            deployRes = e
-        }
+    if (isMainThread) {
+        // console.log('传递数据=>', data)
+        const worker = new Worker(__filename, {
+            // workerData: JSON.parse(JSON.stringify(data._doc))
+            workerData: data
+        });
+        worker.on('message', (d) => {
+            console.log('parent receive message:', d);
+        });
+        worker.on('error', (e) => {
+            console.error('parent receive error', e);
+        });
+        worker.on('exit', (code) => {
+            if (code !== 0)
+                console.error(new Error(`工作线程使用退出码 ${code} 停止`));
+        });
     }
-    aDeploy()
+}
+if (!isMainThread) {
+    deploy(workerData)
 }
 
 module.exports = runDeploy;
