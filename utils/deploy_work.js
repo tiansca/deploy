@@ -178,7 +178,7 @@ const isError = (str) => {
     if (str.indexOf('err') !== -1 || str.indexOf('ERR') !== -1) {
         return Promise.reject('错误，终止')
     } else {
-        return ''
+        return Promise.resolve('')
     }
 }
 
@@ -332,7 +332,6 @@ async function deploy(project) {
             console.log(body) // 请求成功的处理逻辑
         }
     });
-    return Promise.resolve(errorMsg)
 }
 
 const runDeploy = (data) => {
@@ -349,9 +348,17 @@ const runDeploy = (data) => {
             console.error('parent receive error', e);
         });
         worker.on('exit', (code) => {
-            if (code !== 0)
-                console.error(new Error(`工作线程使用退出码 ${code} 停止`));
+            if (code !== 0) {
+                console.error(`工作线程使用退出码 ${code} 停止`);
+            } else {
+                console.log('工作线程正常退出')
+            }
+
         });
+        // 超时自动停止
+        setTimeout(() => {
+            worker.terminate()
+        }, 10 * 60 * 1000)
     }
 }
 if (!isMainThread) {
