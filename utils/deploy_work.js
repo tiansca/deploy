@@ -334,6 +334,10 @@ async function deploy(project) {
     });
 }
 
+function isDockerEnvironment() {
+    return process.env.container || process.env.DOCKER === 'yes';
+}
+
 const runDeploy = (data) => {
     if (isMainThread) {
         console.log('启动新线程')
@@ -356,7 +360,11 @@ const runDeploy = (data) => {
             } else {
                 console.log('工作线程正常退出')
             }
-
+            // docker内重启，解决ssh第二次连接异常退出的问题
+            const isDocker = isDockerEnvironment()
+            if (isDocker) {
+                process.exit(0);
+            }
         });
         // 超时自动停止
         const timer = setTimeout(() => {
