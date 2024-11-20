@@ -25,6 +25,9 @@ RUN npm install
 # 复制应用源代码到工作目录
 COPY . .
 
+# 删除node_modules文件夹，解决第二次使用ssh2异常退出的问题
+RUN rm -rf /app/node_modules/ssh2/lib/protocol/crypto/build/Release/sshcrypto.node
+
 # 暴露应用的端口
 EXPOSE 3210
 
