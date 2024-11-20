@@ -335,7 +335,7 @@ async function deploy(project) {
 }
 
 function isDockerEnvironment() {
-    return process.env.container || process.env.DOCKER === 'yes';
+    return process.env.DOCKER === 'yes';
 }
 
 const runDeploy = (data) => {
@@ -362,6 +362,7 @@ const runDeploy = (data) => {
             }
             // docker内重启，解决ssh第二次连接异常退出的问题
             const isDocker = isDockerEnvironment()
+            console.log('isDocker', isDocker)
             if (isDocker) {
                 process.exit(0);
             }

@@ -1,6 +1,9 @@
 # 使用Node.js官方镜像作为基础镜像
 FROM node:22.1.0
 
+# 设置环境变量
+ENV DOCKER yes
+
 # 安装git
 RUN apt-get update && apt-get install -y git
 
