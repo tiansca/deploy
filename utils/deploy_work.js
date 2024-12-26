@@ -10,6 +10,7 @@ const myDelete = require('./delete')
 const getFullPath = require("./getPullPath");
 const readShell = require('./readShell')
 const rmdirPromise = require("./delete");
+const sendWxNotice = require("./sendWxNotice");
 // let mongoose=require('mongoose');
 
 
@@ -321,6 +322,8 @@ async function deploy(project) {
             id: project._id.toString(),
             name: project.name,
             branch: project.branch,
+            tagName: project.tagName,
+            eventType: project.eventType,
             ip: project.ip,
             path: onlinePath,
             log: errorMsg,
@@ -331,6 +334,8 @@ async function deploy(project) {
             console.log(body) // 请求成功的处理逻辑
         }
     });
+    // 发送微信通知
+    sendWxNotice(project, finished)
 }
 
 function isDockerEnvironment() {
