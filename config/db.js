@@ -2,8 +2,8 @@
  * Created by administrator on 2019/10/31.
  */
 var mongoose = require('mongoose');
-var url ="mongodb://root:tianshicong@localhost:27017/deploy-remote";
-// var url ="mongodb://root:tianshicong@192.168.11.25:27017/deploy-remote";
+// var url ="mongodb://root:tianshicong@localhost:27017/deploy-remote";
+var url ="mongodb://root:tianshicong@192.168.11.25:27017/deploy-remote";
 mongoose.set('useCreateIndex', true)
 mongoose.set('useFindAndModify', false)
 mongoose.connect(url);

@@ -366,9 +366,9 @@ const runDeploy = (data) => {
             }
             // docker内重启，解决ssh第二次连接异常退出的问题
             const isDocker = isDockerEnvironment()
-            console.log('isDocker', isDocker)
+            // console.log('isDocker', isDocker)
             if (isDocker) {
-                process.exit(0);
+                // process.exit(0);
             }
         });
         // 超时自动停止
