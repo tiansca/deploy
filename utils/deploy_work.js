@@ -368,7 +368,7 @@ const runDeploy = (data) => {
             const isDocker = isDockerEnvironment()
             console.log('isDocker', isDocker)
             if (isDocker) {
-                process.exit(0);
+                // process.exit(0);
             }
         });
         // 超时自动停止
