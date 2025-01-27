@@ -19,29 +19,36 @@ const readShell = require("../utils/readShell");
 const getFullPath = require("../utils/getPullPath");
 const saveShell = require("../utils/saveShell");
 const mongoose = require("mongoose");
+const deleteDir = require("../utils/delete");
+const {promises} = require("node:fs");
 // const uploadZipBySSH = require("../utils/uploadZipBySSH");
 
 const getServer = async (project) => {
     return new Promise(function (resolve, reject) {
-        if (project.server) {
-            server.findOne({_id: project.server}, function (err, data) {
-                if (err || !data) {
-                    console.log('没有找到服务器信息！')
-                    reject(err)
-                } else {
-                    const server = data.toObject()
-                    project.ip = server.ip
-                    project.username = server.username
-                    project.password = server.password
-                    // project.rootPath = server.rootPath
-                    project.privateKey = server.privateKey
-                    project.connectionType = server.connectionType
-                    resolve(project)
-                }
-            })
-        } else {
-            reject('没有服务器id')
-        }
+      // project.server为“0”表示本机部署
+      if (project.server === '0') {
+        project.ip = ''
+        resolve(project)
+      }
+      if (project.server) {
+          server.findOne({_id: project.server}, function (err, data) {
+              if (err || !data) {
+                  console.log('没有找到服务器信息！')
+                  reject(err)
+              } else {
+                  const server = data.toObject()
+                  project.ip = server.ip
+                  project.username = server.username
+                  project.password = server.password
+                  // project.rootPath = server.rootPath
+                  project.privateKey = server.privateKey
+                  project.connectionType = server.connectionType
+                  resolve(project)
+              }
+          })
+      } else {
+          reject('没有服务器id')
+      }
     })
 }
 
@@ -84,8 +91,8 @@ router.post('/add_project', function(req, res, next) {
         try {
           await clone(postData.url, postData.localPath || postData.name).then(() => {
             res.send({code: 0, msg: '新增成功！拉取项目成功！'})
-          }).catch(() => {
-            res.send({code: 1, msg: '新增成功！拉取项目失败！'})
+          }).catch((error) => {
+            res.send({code: 1, msg: '新增成功！拉取项目失败！' + error.stderr})
           })
         } catch (e) {
           res.send({code: 1, msg: '新增成功！拉取项目失败1！'})
@@ -450,6 +457,55 @@ router.get('/get_shell_content', async function (req, res, next) {
     } catch (e) {
         res.send({code: -1, msg: '保存失败', error: e})
     }
+})
+
+router.get('/get_server_ip', async function (req, res, next) {
+  const networks = os.networkInterfaces();
+  let ip = ''
+  for (const name of Object.keys(networks)) {
+    for (const network of networks[name]) {
+      if (network.family === 'IPv4' && !network.internal) {
+        ip = network.address
+        break
+      }
+    }
+    if (ip) {
+      break
+    }
+  }
+  res.send({
+    code: 0,
+    data: {
+      ip
+    }
+  })
+})
+
+router.get('/clone_project', async function (req, res, next) {
+  const id = req.query.id
+  if (!id) {
+    res.send({code: -1, msg: '缺少参数'})
+    return
+  }
+  try {
+    const data = await project.findOne({_id: id})
+    if (!data) {
+      res.send({code: -1, msg: '项目不存在'})
+      return
+    }
+    const localPath = getFullPath(data.localPath || data.name, 'storage')
+    // 重命名localPath
+    // 生成随机字符串
+    const newLocalPath = getFullPath(`${uuidv4()}_${data.localPath || data.name}`, 'storage')
+    await promises.rename(localPath, newLocalPath)
+    await clone(data.url, localPath)
+    res.send({code: 0, msg: '克隆成功', data})
+    // 删除旧的文件
+    deleteDir(newLocalPath)
+  }catch (e) {
+    console.log(e)
+    res.send({code: -1, msg: '克隆失败', error: e})
+  }
 })
 
 module.exports = router;

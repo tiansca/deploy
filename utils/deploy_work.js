@@ -11,6 +11,9 @@ const getFullPath = require("./getPullPath");
 const readShell = require('./readShell')
 const rmdirPromise = require("./delete");
 const sendWxNotice = require("./sendWxNotice");
+const simpleDelete = require("./simpleDelete");
+const simpleCopy = require("./simpleCopy");
+const {v4:uuidv4} = require('uuid');
 // let mongoose=require('mongoose');
 
 
@@ -184,7 +187,7 @@ const isError = (str) => {
 
 const runShell = async(project, shellType = 'buildShell') => {
     console.log('开始执行shell脚本', project[shellType])
-    const directoryName = project.directoryName || project.name
+    const directoryName = project.localPath || project.name
     // 在项目路径下运行shell脚本
     const res = await shell.exec(getFullPath(project[shellType], 'shell'), {cwd: path.resolve(storagePath, directoryName)})
     if (res.code === 0) {
@@ -197,7 +200,9 @@ const runShell = async(project, shellType = 'buildShell') => {
 // 执行远程脚本
 const runRemoteShell = async(localPath, remotePath) => {
     console.log('runRemoteShell')
-    let shellPath = remotePath + '/run.sh'
+    // 随机生成文件名
+    const shellName = `${uuidv4()}.sh`
+    let shellPath = remotePath + '/' + shellName
     shellPath = shellPath.replace('//', '/')
     await SSH.putFiles([{ local: localPath, remote: shellPath }])
     // 设置脚本文件执行权限
@@ -205,13 +210,53 @@ const runRemoteShell = async(localPath, remotePath) => {
     let res = ''
     // 执行脚本文件
     try {
-        res = await runCommand('./run.sh', remotePath )
+        res = await runCommand('./' + shellName, remotePath )
     }catch (e) {
         console.log(e)
     }
+
+    try {
+        await runCommand('rm -f ./' + shellName, remotePath )
+    } catch (e) {
+        console.error('删除脚本失败', e)
+    }
+
     // 断开连接
     await SSH.dispose()
     return '执行远程脚本成功<br>' + res
+}
+
+// 复制产出物到部署路径
+const copyDist = async(project) => {
+    let errorMsg = ''
+    let deployPath = project.path
+    let outputDir = project.outputDir
+    const localPath = project.localPath || project.name
+    if (deployPath && outputDir) {
+        if (deployPath[0] === '/') {
+            deployPath = deployPath.replace('/', '')
+        }
+        const fullDeployPath = path.resolve(deployRootPath,'./', deployPath)
+        let isExists = await getStat(fullDeployPath);
+        //如果该路径且不是文件，返回true
+        console.log(deployRootPath, fullDeployPath)
+        if(!isExists || !isExists.isDirectory()){
+            console.log('项目路径不存在！')
+            // todo 创建文件夹
+            await fs.promises.mkdir(fullDeployPath, {recursive: true})
+            errorMsg += '创建文件夹成功<br>'
+        }
+        // 清空部署目录
+        await simpleDelete(fullDeployPath)
+        errorMsg += '清空部署目录<br>'
+        // 复制打包文件到部署目录
+        if (outputDir[0] === '/') {
+            outputDir = outputDir.replace('/', '')
+        }
+        await simpleCopy(path.resolve(storagePath, localPath, './', outputDir), fullDeployPath)
+        errorMsg += '复制打包文件到部署目录<br>'
+    }
+    return errorMsg
 }
 
 async function deploy(project) {
@@ -249,8 +294,10 @@ async function deploy(project) {
         //     console.log(e)
         // }
         // 判断path是否为空，或者只包含一个/
-        if (!project.path || project.path === '/' || project.path.split('/').length === 1 || project.path.indexOf('/') !== 0) {
-            errorMsg += 'error：远程部署路径有误，请修改，必须包含两个及以上“/”，且以“/”开头' + '<br>'
+        console.log('path=>', project.path)
+        console.log('path.split=>', project.path.split('\\'))
+        if (!project.path || project.path === '/' || (project.path.split('/').length === 1 && project.path.split('\\').length === 1)) {
+            errorMsg += 'error：部署路径有误，请修改，必须包含两个及以上“/”' + '<br>'
             await isError(errorMsg)
         }
         if (project.buildMode === 'npm') {
@@ -272,13 +319,19 @@ async function deploy(project) {
             errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
             await isError(errorMsg)
             errorMsg += '打包完成<br>'
-            // 压缩代码
-            await zipDist(project)
-            errorMsg += '压缩代码成功<br>'
-            await sleep(2000)
-            // 上传服务器
-            await uploadZipBySSH(project)
-            errorMsg += '上传服务器成功<br>'
+            await sleep(500)
+            if (project.ip) {
+                // 压缩代码
+                await zipDist(project)
+                errorMsg += '压缩代码成功<br>'
+                await sleep(2000)
+                // 上传服务器
+                await uploadZipBySSH(project)
+                errorMsg += '上传服务器成功<br>'
+            } else {
+                const copyRes = await copyDist(project)
+                errorMsg += copyRes
+            }
             finished = true
             console.log('npm 部署完成')
         } else {
@@ -288,19 +341,25 @@ async function deploy(project) {
                 console.log('shell脚本执行完成-build', errorMsg)
                 await isError(errorMsg)
             }
-            // 上传服务器
-            await zipDist(project)
-            await uploadZipBySSH(project)
-            await isError(errorMsg)
-            errorMsg += '上传服务器成功<br>'
-            // 执行启动脚本
-            if (project.startShell) {
-                // 获取shell内容
-                // const content = await readShell(getFullPath(project['startShell'], 'shell'))
-                // if (content) {
-                await connectSSH(project)
-                errorMsg += await runRemoteShell(getFullPath(project['startShell'], 'shell'), project.path)
-                // }
+            await sleep(500)
+            if (project.ip) {
+                // 上传服务器
+                await zipDist(project)
+                await uploadZipBySSH(project)
+                await isError(errorMsg)
+                errorMsg += '上传服务器成功<br>'
+                // 执行启动脚本
+                if (project.startShell) {
+                    // 获取shell内容
+                    // const content = await readShell(getFullPath(project['startShell'], 'shell'))
+                    // if (content) {
+                    await connectSSH(project)
+                    errorMsg += await runRemoteShell(getFullPath(project['startShell'], 'shell'), project.path)
+                    // }
+                }
+            } else {
+                const copyRes = await copyDist(project)
+                errorMsg += copyRes
             }
             finished = true
         }
