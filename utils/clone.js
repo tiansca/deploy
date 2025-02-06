@@ -6,7 +6,7 @@ async function clone(url, name) {
         shell.cd(storagePath)
         const res = await shell.exec('git clone ' + url + (name?' ' + name : ''))
         if (res.code !== 0) {
-            reject()
+            reject(res)
             console.log(res)
             // process.exit() // 退出流程
         } else {

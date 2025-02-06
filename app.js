@@ -10,6 +10,7 @@ var usersRouter = require('./routes/users');
 
 var app = express();
 var bodyParser = require('body-parser')
+const {exec} = require("child_process");
 app.use(bodyParser.json());
 
 app.use(bodyParser.urlencoded({ extended: false}));
@@ -51,5 +52,23 @@ app.use(function(err, req, res, next) {
   res.status(err.status || 500);
   res.render('error');
 });
+
+// docker中执行copySSH.sh脚本
+function runCopySSH() {
+  // 判断是否是docker容器
+  if (process.env.DOCKER === 'yes') {
+    const { exec } = require('child_process');
+    exec('sh ./copySSH.sh', (error, stdout, stderr) => {
+      if (error) {
+        console.error(`exec error: ${error}`);
+        return;
+      }
+      console.log(`stdout: ${stdout}`);
+      console.error(`stderr: ${stderr}`);
+    });
+  }
+}
+
+runCopySSH()
 
 module.exports = app;

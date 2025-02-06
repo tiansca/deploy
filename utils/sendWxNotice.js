@@ -4,7 +4,7 @@ const sendWxNotice = (project, finished) => {
   const content = `##### 项目：${project.name}
 ##### 结果：${finished ? '成功' : '失败'}
 ##### ${project.eventType === 'push' ? '分支' : '标签'}：${project.eventType === 'push' ? project.branch : project.tagName}
-##### 部署至：${project.ip}
+##### 部署至：${project.ip || '本机'}
 ###### 详细内容请查看日志`
   request({
     url: 'https://xizhi.qqoq.net/XZ636e3c1c8c932063583342c1520cb70a.channel',
