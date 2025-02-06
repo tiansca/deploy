@@ -54,15 +54,23 @@ app.use(function(err, req, res, next) {
 });
 
 // docker中执行copySSH.sh脚本
-function runCopySSH() {
+async function runCopySSH() {
   // 判断是否是docker容器
   if (process.env.DOCKER === 'yes') {
-    const { exec } = require('child_process');
+    // 用fs模块将copySSH.sh脚本文件内的CRLF替换为LF
+    const fs = require('fs');
+    const shellContent = await fs.promises.readFile('./copySSH.sh', 'utf8')
+    console.log("读取copySSH.sh文件内容", shellContent)
+    const newData = shellContent.replace(/\r\n/g, '\n');
+    await fs.promises.writeFile('./copySSH.sh', newData, 'utf8')
+    console.log("替换copySSH.sh文件内容", newData)
+    const {exec} = require('child_process');
     exec('sh ./copySSH.sh', (error, stdout, stderr) => {
       if (error) {
         console.error(`exec error: ${error}`);
         return;
       }
+      console.log('执行copySSH.sh成功');
       console.log(`stdout: ${stdout}`);
       console.error(`stderr: ${stderr}`);
     });
