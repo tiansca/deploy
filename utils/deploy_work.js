@@ -233,27 +233,27 @@ const copyDist = async(project) => {
     let outputDir = project.outputDir
     const localPath = project.localPath || project.name
     if (deployPath && outputDir) {
-        if (deployPath[0] === '/') {
-            deployPath = deployPath.replace('/', '')
-        }
-        const fullDeployPath = path.resolve(deployRootPath,'./', deployPath)
-        let isExists = await getStat(fullDeployPath);
+        // if (deployPath[0] === '/') {
+        //     deployPath = deployPath.replace('/', '')
+        // }
+        // const fullDeployPath = path.resolve(deployRootPath,'./', deployPath)
+        let isExists = await getStat(deployPath);
         //如果该路径且不是文件，返回true
-        console.log(deployRootPath, fullDeployPath)
+        console.log(deployRootPath, deployPath)
         if(!isExists || !isExists.isDirectory()){
             console.log('项目路径不存在！')
             // todo 创建文件夹
-            await fs.promises.mkdir(fullDeployPath, {recursive: true})
+            await fs.promises.mkdir(deployPath, {recursive: true})
             errorMsg += '创建文件夹成功<br>'
         }
         // 清空部署目录
-        await simpleDelete(fullDeployPath)
+        await simpleDelete(deployPath)
         errorMsg += '清空部署目录<br>'
         // 复制打包文件到部署目录
         if (outputDir[0] === '/') {
             outputDir = outputDir.replace('/', '')
         }
-        await simpleCopy(path.resolve(storagePath, localPath, './', outputDir), fullDeployPath)
+        await simpleCopy(path.resolve(storagePath, localPath, './', outputDir), deployPath)
         errorMsg += '复制打包文件到部署目录<br>'
     }
     return errorMsg

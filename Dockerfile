@@ -3,6 +3,7 @@ FROM node:22.1.0
 
 # 设置环境变量
 ENV DOCKER yes
+ENV MOMGO_DOCKER yes
 
 # 安装git
 RUN apt-get update && apt-get install -y git
