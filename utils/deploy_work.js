@@ -63,7 +63,7 @@ const connectSSH = async(project) => {
             await SSH.connect({
                 host: project.ip,
                 username: project.username,
-                privateKey: path.resolve(project.privateKey), //秘钥登录(推荐) 方式一
+                privateKeyPath: path.resolve(project.privateKey), //秘钥登录(推荐) 方式一
                 // password: project.password // 密码登录 方式二
             })
         } else {
