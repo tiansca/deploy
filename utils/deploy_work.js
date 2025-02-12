@@ -76,7 +76,7 @@ const connectSSH = async(project) => {
             })
         }
     } catch (error) {
-        console.log('连接失败')
+        console.log('连接失败', error)
         // process.exit() // 退出流程
     }
 }
