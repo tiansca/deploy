@@ -79,4 +79,7 @@ async function runCopySSH() {
 
 runCopySSH()
 
+// 记录当前运行的子线程任务
+global.activeWorkers = {}
+
 module.exports = app;

@@ -231,6 +231,7 @@ router.post('/update', function(req, res, next) {
     _id: req.body._id,
     build: req.body.build,
     localPath: req.body.localPath || req.body.name,
+    outputDir: req.body.outputDir || '',
     buildMode: req.body.buildMode,
     eventType: req.body.eventType,
     buildShell: req.body.buildShell,

@@ -16,6 +16,8 @@ const simpleCopy = require("./simpleCopy");
 const {v4:uuidv4} = require('uuid');
 // let mongoose=require('mongoose');
 
+// 记录耗时
+const startTime = Date.now()
 
 //等待两秒
 // const wait2s = async () => {
@@ -150,8 +152,11 @@ const uploadZipBySSH = async(project) => {
         // 将目标目录的dist里面文件移出到目标文件
         // 举个例子 假如我们部署在 /test/html 这个目录下 只有一个网站, 那么上传解压后的文件在 /test/html/dist 里
         // 需要将 dist 目录下的文件 移出到 /test/html ;  多网站情况, 如 /test/html/h5  或者 /test/html/admin 都和上面同样道理
-        await runCommand(`mv -f ${onlinePath}/dist/*  ${onlinePath}`, onlinePath)
-        await runCommand(`rm -rf ${onlinePath}/dist`, onlinePath) // 移出后删除 dist 文件夹
+        // 产出物路径不一定是dist,需要取产出物路径的最后一级
+        let outputDir = project.outputDir || 'dist'
+        const zipName = path.basename(outputDir) // 解压后的文件夹名
+        await runCommand(`mv -f ${onlinePath}/${zipName}/*  ${onlinePath}`, onlinePath)
+        await runCommand(`rm -rf ${onlinePath}/${zipName}`, onlinePath) // 移出后删除 dist 文件夹
         SSH.dispose() // 断开连接
         const id = project._id.toString()
         console.log(id)
@@ -367,6 +372,26 @@ async function deploy(project) {
     } catch (e) {
         errorMsg += e || '未知错误'
     }
+    // 计算耗时, 如果超过60秒转为MM分ss秒
+    let executionTime = Date.now() - startTime
+    if (executionTime > 60000) {
+        executionTime = Math.round(executionTime / 60000) + '分' + Math.round((executionTime % 60000) / 1000) + '秒'
+    } else {
+        executionTime = Math.round(executionTime / 1000) + '秒'
+    }
+    console.log('部署完成，耗时=>', executionTime)
+    const options = {
+        timeZone: 'Asia/Shanghai', // 亚洲/上海时区即东八区
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false // 使用24小时制
+    };
+
+    errorMsg += '<br>耗时=>' + executionTime + '<br>结束时间=>' + new Date().toLocaleString('zh-CN', options)
     let onlinePath = project.path
     onlinePath = onlinePath.replace('///', '/')
     onlinePath = onlinePath.replace('//', '/')
@@ -432,8 +457,9 @@ const runDeploy = (data) => {
         });
         // 超时自动停止
         const timer = setTimeout(() => {
+            console.log('超时自动停止')
             worker.terminate()
-        }, 10 * 60 * 1000)
+        }, 30 * 60 * 1000)
     }
 }
 if (!isMainThread) {
