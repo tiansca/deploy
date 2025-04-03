@@ -21,6 +21,7 @@ const saveShell = require("../utils/saveShell");
 const mongoose = require("mongoose");
 const deleteDir = require("../utils/delete");
 const {promises} = require("node:fs");
+const fs = require("fs");
 // const uploadZipBySSH = require("../utils/uploadZipBySSH");
 
 const getServer = async (project) => {
@@ -76,11 +77,16 @@ router.post('/add_project', function(req, res, next) {
     startShell: req.body.startShell,
     tagPrefixes: req.body.tagPrefixes || ''
   };
-  project.findOne({name:postData.name, branch:postData.branch},function (err, data) {
+  // 判断本地目录是否被占用
+  let searchParams = {$or: [{ localPath: '',  name: postData.outputDir}, { localPath: postData.localPath }]}
+  if (!req.body.localPath || req.body.name === req.body.localPath) {
+    searchParams = {$or: [{ localPath: '',  name: req.body.name}, { localPath: req.body.name }]}
+  }
+  project.findOne(searchParams,function (err, data) {
     if(err){
       res.send({code:-1,msg:'服务器错误'})
     }else if (data) {
-      res.send({code:-2,msg:'项目已经存在'})
+      res.send({code:-2,msg:'本地目录已被占用'})
     } else {
       project.create(postData, async function (err, data) {
         if (err) {
@@ -102,6 +108,19 @@ router.post('/add_project', function(req, res, next) {
   })
   // res.send(req.body)
 });
+async function doTask(taskList) {
+  if (!taskList.length) {
+    return
+  }
+  for (let i = 0; i < taskList.length; i++) {
+    try {
+      console.log('开始部署=>', taskList[i].name)
+      await runDeploy(taskList[i])
+    } catch (e) {
+      console.log(e)
+    }
+  }
+}
 router.post('/deploy', function(req, res, next) {
   console.log('分支或tag=>', req.body.ref)  // refs/heads/dev
   console.log('项目=>', req.body?.project?.name)
@@ -128,42 +147,49 @@ router.post('/deploy', function(req, res, next) {
       console.log('项目不存在')
       res.send({data: -1, msg: '项目不存在'})
     } else {
-      const list = data
+      let list = data || []
+      // 如果有tagName，则判断tagName是否在tagPrefixes中
+      if (tagName) {
+        list = list.filter(item => {
+          return item.tagPrefixes && tagName.startsWith(item.tagPrefixes)
+        })
+      }
       if (!list.length) {
         console.log('没有找到项目')
         res.send({data: -4, msg: '没有找到项目'})
         return
       }
-      let projectData = list[0]
-      // 判断事件有无tagName
-      if (tagName) {
-        // 判断tagName是否在tagPrefixes中
-        for (const item of list) {
-          if (tagName.startsWith(item.tagPrefixes)) {
-            projectData = item
-            break
+      const taskList = []
+      let hasError = false
+      for (let projectData of list) {
+        if (projectData.status) {
+          try {
+            // deploy(data)
+            projectData = projectData.toObject()
+            projectData._id = projectData._id.toString()
+            projectData.tagName = tagName
+            const newData = await getServer(projectData)
+            console.log('project', newData)
+            taskList.push(newData)
+          } catch (e) {
+            console.log(e)
+            hasError = true
           }
+        } else {
+          console.log('项目没有开启自动部署')
         }
-     }
-      if (projectData.status) {
-        try {
-          // deploy(data)
-          projectData = projectData.toObject()
-          projectData._id = projectData._id.toString()
-          projectData.tagName = tagName
-          const newData = await getServer(projectData)
-          console.log('project', newData)
-          runDeploy(newData)
-          res.send({code: 0, msg: '启动部署'})
-        } catch (e) {
-          console.log(e)
-          res.send({code: -1, msg: e || '部署失败'})
+      }
+      doTask(taskList)
+      if (hasError) {
+        if (taskList.length) {
+          res.send({code: -1, msg: `部分启动失败：${taskList.length}任务启动成功`})
+        } else {
+          res.send({code: -1, msg: '启动部署失败'})
         }
       } else {
-        console.log('项目没有开启自动部署')
-        res.send({data: -2, msg: '项目没有开启自动部署'})
+        res.send({code: 0, msg: `启动部署：${taskList.length}个部署任务`})
       }
-    }
+     }
   })
 });
 router.get('/list', function(req, res, next) {
@@ -242,11 +268,24 @@ router.post('/update', function(req, res, next) {
     if(err || !data){
       res.send({code:1,msg:'项目不存在'})
     }else {
-      project.update({_id:postData._id}, postData, function (err, ret) {
-        if(err){
-          res.send({code:2,msg:"编辑失败！"})
-        }else {
-          res.send({code:0,msg:"编辑成功！"})
+      // 判断本地路径是否被占用
+      let searchParams = {_id: {$ne: postData._id}, $or: [{ localPath: '',  name: postData.outputDir}, { localPath: postData.localPath }]}
+      if (!req.body.localPath || req.body.name === req.body.localPath) {
+        searchParams = {_id: {$ne: postData._id}, $or: [{ localPath: '',  name: req.body.name}, { localPath: req.body.name }]}
+      }
+      project.findOne(searchParams,function (err, data) {
+        if (err) {
+          res.send({code: -1, msg: '服务器错误'})
+        } else if (data) {
+          res.send({code: -2, msg: '本地目录已被占用'})
+        } else {
+          project.update({_id:postData._id}, postData, function (err, ret) {
+            if(err){
+              res.send({code:2,msg:"编辑失败！"})
+            }else {
+              res.send({code:0,msg:"编辑成功！"})
+            }
+          })
         }
       })
     }
@@ -495,14 +534,20 @@ router.get('/clone_project', async function (req, res, next) {
       return
     }
     const localPath = getFullPath(data.localPath || data.name, 'storage')
-    // 重命名localPath
-    // 生成随机字符串
-    const newLocalPath = getFullPath(`${uuidv4()}_${data.localPath || data.name}`, 'storage')
-    await promises.rename(localPath, newLocalPath)
-    await clone(data.url, localPath)
+    // 判断localPath是否存在
+    try {
+        await fs.promises.access(localPath)
+        // 重命名localPath
+        // 生成随机字符串
+        const newLocalPath = getFullPath(`${uuidv4()}_${data.localPath || data.name}`, 'storage')
+        await promises.rename(localPath, newLocalPath)
+        deleteDir(newLocalPath)
+    } catch (e) {
+      console.log(e)
+    }
+
+    await clone(data.url, data.localPath || data.name)
     res.send({code: 0, msg: '克隆成功', data})
-    // 删除旧的文件
-    deleteDir(newLocalPath)
   }catch (e) {
     console.log(e)
     res.send({code: -1, msg: '克隆失败', error: e})
