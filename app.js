@@ -81,5 +81,11 @@ runCopySSH()
 
 // 记录当前运行的子线程任务
 global.activeWorkers = {}
+//等待队列和运行任务
+global.waitQueue = []
+global.runWork = null
+// sse客户端集合
+global.sseClients = new Set()
+console.log(global.sseClients)
 
 module.exports = app;

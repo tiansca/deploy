@@ -10,6 +10,7 @@ var runDeploy = require('../utils/deploy_work')
 var rmdirPromise = require('../utils/delete')
 const {v4:uuidv4} = require('uuid');
 const os = require('os');
+const task = require('../utils/task.js')
 
 
 
@@ -114,8 +115,8 @@ async function doTask(taskList) {
   }
   for (let i = 0; i < taskList.length; i++) {
     try {
-      console.log('开始部署=>', taskList[i].name)
-      await runDeploy(taskList[i])
+      console.log('添加任务=>', taskList[i].name)
+      task.addTask(taskList[i])
     } catch (e) {
       console.log(e)
     }
@@ -236,7 +237,7 @@ router.get('/deploy', function(req, res, next) {
           data._id = data._id.toString()
           const newData = await getServer(data)
           console.log('项目=>', newData)
-          runDeploy(newData)
+          task.addTask(newData)
         } catch (e) {
           console.log(e)
         }
@@ -553,5 +554,33 @@ router.get('/clone_project', async function (req, res, next) {
     res.send({code: -1, msg: '克隆失败', error: e})
   }
 })
+
+router.get('/task', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  // 发送初始状态
+  task.sendTaskList(res);
+
+  // 添加新客户端
+  global.sseClients.add(res);
+
+  // 断开连接处理
+  req.on('close', () => {
+    global.sseClients.delete(res);
+    res.end();
+  });
+  if (global.activeWorkers) {
+    const keys = Object.keys(global.activeWorkers);
+    for (const key of keys) {
+      const worker = global.activeWorkers[key];
+      worker.postMessage({
+        type: 'initLog',
+      });
+    }
+  }
+});
 
 module.exports = router;
