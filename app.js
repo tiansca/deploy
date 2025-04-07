@@ -11,6 +11,7 @@ var usersRouter = require('./routes/users');
 var app = express();
 var bodyParser = require('body-parser')
 const {exec} = require("child_process");
+const addAdmin = require("./utils/addAdmin");
 app.use(bodyParser.json());
 
 app.use(bodyParser.urlencoded({ extended: false}));
@@ -87,5 +88,13 @@ global.runWork = null
 // sse客户端集合
 global.sseClients = new Set()
 console.log(global.sseClients)
+
+// 插入admin用户
+try {
+  addAdmin()
+} catch (e) {
+  console.log(e)
+}
+
 
 module.exports = app;

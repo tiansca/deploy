@@ -500,7 +500,8 @@ async function deploy(project) {
             ip: project.ip || '本地',
             path: onlinePath,
             log: errorMsg,
-            success: finished
+            success: finished,
+            triggerBy: project.triggerBy || ''
         }
     }, function(error, response, body) {
         if (!error && response.statusCode == 200) {

@@ -22,6 +22,10 @@ var recordSchema = new Schema({
     success: {
         type: Boolean,
         default: true
+    },
+    triggerBy: {
+        type: String,
+        default: ''
     }
 }, {
     versionKey: false,

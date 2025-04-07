@@ -54,6 +54,35 @@ const getServer = async (project) => {
     })
 }
 
+// 中间件，获取token
+// 白名单
+const whiteList = ['/users/login', '/deploy', '/task', '/add_record']
+router.use(function (req, res, next) {
+  console.log('req.path', req.path)
+  if (whiteList.includes(req.path)) {
+    next()
+  } else {
+    const token = req.cookies.token
+    if (!token || JSON.stringify(token) === '{}') {
+      res.send({
+        code: -1,
+        msg: '请先登录'
+      })
+    } else {
+      try {
+        // 解析token
+        JSON.parse(Buffer.from(token, 'base64').toString('ascii'))
+        next()
+      } catch (e) {
+        res.send({
+          code: -1,
+          msg: '请先登录'
+        })
+      }
+    }
+  }
+})
+
 /* GET home page. */
 router.get('/', function(req, res, next) {
   // console.log(req)
@@ -171,6 +200,7 @@ router.post('/deploy', function(req, res, next) {
             projectData.tagName = tagName
             const newData = await getServer(projectData)
             console.log('project', newData)
+            newData.triggerBy = 'git'
             taskList.push(newData)
           } catch (e) {
             console.log(e)
@@ -237,6 +267,14 @@ router.get('/deploy', function(req, res, next) {
           data._id = data._id.toString()
           const newData = await getServer(data)
           console.log('项目=>', newData)
+          // 获取用户信息
+          const token = req.cookies.token
+          if (token) {
+            const userObj = JSON.parse(Buffer.from(token, 'base64').toString('ascii'))
+            if (userObj.username) {
+              newData.triggerBy = userObj.username
+            }
+          }
           task.addTask(newData)
         } catch (e) {
           console.log(e)
@@ -325,7 +363,8 @@ router.post('/add_record', function(req, res, next) {
       ip: req.body.ip,
       path: req.body.path,
       log: req.body.log,
-      success: req.body.success
+      success: req.body.success,
+      triggerBy: req.body.triggerBy
     }, function (err, data) {
       if (!err) {
         console.log('记录成功')
