@@ -341,21 +341,32 @@ router.post('/add_record', function(req, res, next) {
 });
 router.get('/record_list', function(req, res, next) {
   const id = req.query.project_id
-  if (!id) {
-    res.send({code: -1, msg: '缺少id'})
-    return
-  }
-  record.find({project_id: id}, function (err,data) {
-    if(err){
-      res.send({code:1,msg:'查询失败'})
-    }else {
-      for (let a = 0; a < data.length; a++) {
-        data[a] = data[a].toObject()
-        data[a].shijian = data[a].createTime.valueOf()
+  if (id) {
+    record.find({project_id: id}, function (err,data) {
+      if(err){
+        res.send({code:1,msg:'查询失败'})
+      }else {
+        for (let a = 0; a < data.length; a++) {
+          data[a] = data[a].toObject()
+          data[a].shijian = data[a].createTime.valueOf()
+        }
+        res.send({code:0,data:data})
       }
-      res.send({code:0,data:data})
-    }
-  }).sort({createTime: -1}).limit(100)
+    }).sort({createTime: -1}).limit(100)
+  } else {
+    record.find({}, function (err,data) {
+      if(err){
+        res.send({code:1,msg:'查询失败'})
+      }else {
+        for (let a = 0; a < data.length; a++) {
+          data[a] = data[a].toObject()
+          data[a].shijian = data[a].createTime.valueOf()
+        }
+        res.send({code:0,data:data})
+      }
+    }).sort({createTime: -1}).limit(100)
+  }
+
 });
 router.post('/add_server', function (req, res, next) {
     var postData = {
@@ -468,7 +479,7 @@ router.post('/add_shell', async function (req, res, next) {
         await saveShell(getFullPath(name, 'shell'), content)
         res.send({code: 0, msg: '保存成功', data: {name}})
     } catch (e) {
-        res.send({code: -1, msg: '保存失败', error: e})
+        res.send({code: -1, msg: e || '保存失败', error: e})
     }
 })
 router.post('/update_shell', async function (req, res, next) {
@@ -482,7 +493,7 @@ router.post('/update_shell', async function (req, res, next) {
         await saveShell(getFullPath(name, 'shell'), content)
         res.send({code: 0, msg: '保存成功', data: {name}})
     } catch (e) {
-        res.send({code: -1, msg: '保存失败', error: e})
+        res.send({code: -1, msg: e || '保存失败', error: e})
     }
 })
 
@@ -582,5 +593,49 @@ router.get('/task', (req, res) => {
     }
   }
 });
+
+// 终止当前任务
+router.get('/stop_curr', async (req, res) => {
+  if (global.activeWorkers) {
+    // 获取keys
+    const keys = Object.keys(global.activeWorkers);
+    for (const key of keys) {
+      const worker = global.activeWorkers[key];
+      worker.postMessage({
+        type: 'stop',
+      });
+      await worker.terminate()
+    }
+    res.send({
+      code: 0,
+      msg: '停止成功',
+    });
+  }
+})
+
+// 取消等待中的任务
+router.get('/cancel_task', async (req, res) => {
+  if (req.query.id) {
+    console.log(req.query.id)
+    task.removeTask(req.query.id)
+    try {
+      res.send({
+        code: 0,
+        msg: '取消成功',
+      });
+    } catch (e) {
+      res.send({
+        code: -1,
+        msg: '取消失败',
+        error: e
+      });
+    }
+  } else {
+    res.send({
+      code: -1,
+      msg: '缺少id',
+    });
+  }
+})
 
 module.exports = router;

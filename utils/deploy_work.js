@@ -14,6 +14,7 @@ const sendWxNotice = require("./sendWxNotice");
 const simpleDelete = require("./simpleDelete");
 const simpleCopy = require("./simpleCopy");
 const {v4:uuidv4} = require('uuid');
+const detectDangerousDeletes = require("./detectDangerousDeletes");
 // let mongoose=require('mongoose');
 // 记录shell子进程
 let childProcess = null
@@ -232,6 +233,11 @@ const isError = (str) => {
 async function runLocalShellCommand(command, options) {
     if (!options) {
         options = {}
+    }
+    // 检查是否有删除命令
+    const isDelete = detectDangerousDeletes(command)
+    if (isDelete) {
+        return Promise.reject('包含不安全命令，终止')
     }
     console.log('执行命令', command, JSON.stringify(options))
     sendLog('执行命令：' + command)
