@@ -381,7 +381,7 @@ router.post('/add_record', function(req, res, next) {
 router.get('/record_list', function(req, res, next) {
   const id = req.query.project_id
   if (id) {
-    record.find({project_id: id}, function (err,data) {
+    record.find({project_id: id}, {log: 0},function (err,data) {
       if(err){
         res.send({code:1,msg:'查询失败'})
       }else {
@@ -393,7 +393,7 @@ router.get('/record_list', function(req, res, next) {
       }
     }).sort({createTime: -1}).limit(100)
   } else {
-    record.find({}, function (err,data) {
+    record.find({}, {log: 0},function (err,data) {
       if(err){
         res.send({code:1,msg:'查询失败'})
       }else {
@@ -406,6 +406,22 @@ router.get('/record_list', function(req, res, next) {
     }).sort({createTime: -1}).limit(100)
   }
 
+});
+
+// 日志详情
+router.get('/record_detail', function(req, res, next) {
+  const id = req.query.id
+  if (id) {
+    record.findOne({_id:id},function (err, data) {
+      if(err){
+        res.send({code:1,msg:'查询失败'})
+      }else {
+        res.send({code:0,data:data.log})
+      }
+    })
+  } else {
+    res.send({code: -1, msg: '缺少id'})
+  }
 });
 router.post('/add_server', function (req, res, next) {
     var postData = {

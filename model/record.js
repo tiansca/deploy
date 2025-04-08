@@ -32,4 +32,6 @@ var recordSchema = new Schema({
     timestamps: { createdAt: 'createTime', updatedAt: 'updateTime' }
 })
 
+recordSchema.index({ project_id: 1 });
+
 module.exports = mongoose.model('record', recordSchema);

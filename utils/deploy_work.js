@@ -558,6 +558,7 @@ const runDeploy = (data) => {
                 } else if(d.type === 'log') {
                     global.sseClients.forEach(client => {
                         client.write(`data: ${JSON.stringify({ log: d.logContent, type: 'log' })}\n\n`);
+                        sendTaskList(client)
                     });
                 } else if(d.type === 'clearLog') {
                     global.sseClients.forEach(client => {

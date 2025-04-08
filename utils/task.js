@@ -1,5 +1,4 @@
 const runDeploy = require('./deploy_work.js')
-console.log(runDeploy)
 const task = {
   addTask (task) {
     // 添加任务
