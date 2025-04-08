@@ -15,7 +15,9 @@ const simpleDelete = require("./simpleDelete");
 const simpleCopy = require("./simpleCopy");
 const {v4:uuidv4} = require('uuid');
 const detectDangerousDeletes = require("./detectDangerousDeletes");
+const stripAnsi = require('strip-ansi');
 // let mongoose=require('mongoose');
+shell.config.execEncoding = 'utf8';
 // 记录shell子进程
 let childProcess = null
 // 记录耗时
@@ -260,8 +262,8 @@ async function runLocalShellCommand(command, options) {
         childProcess.stdout.on('data', function(data) {
             /* ... do something with data ... */
             // console.log(data)
-            res += data
-            sendLog(data)
+            res += stripAnsi(data)
+            sendLog(stripAnsi(data))
         });
 
         // 监听错误事件
