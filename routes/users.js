@@ -80,6 +80,11 @@ router.get('/myself', function(req, res, next) {
       })
     } else {
       if (data) {
+        res.cookie('token', token, {
+          httpOnly: true,
+          maxAge: 1000 * 60 * 60 * 24,
+          // secure: true // 生产环境建议启用
+        });
         res.send({
           code: 0,
           msg: '获取用户信息成功',
