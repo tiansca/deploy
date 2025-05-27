@@ -16,6 +16,8 @@ const simpleCopy = require("./simpleCopy");
 const {v4:uuidv4} = require('uuid');
 const detectDangerousDeletes = require("./detectDangerousDeletes");
 const stripAnsi = require('strip-ansi');
+const sendRobotMessage = require("./sendRobotMessage");
+const robot = require("../model/robot");
 // let mongoose=require('mongoose');
 shell.config.execEncoding = 'utf8';
 // 记录shell子进程
@@ -256,8 +258,8 @@ async function runLocalShellCommand(command, options) {
             if (code === 0) {
                 resolve(res);
             } else {
-                reject(new Error(`命令执行失败，退出码: ${code}, message： ${stderrData || 'null'}`));
-                sendLog(`命令执行失败，退出码: ${code}`)
+                reject(new Error(`命令执行失败，退出码: ${code}, message： ${stderrData || res}`));
+                sendLog(`命令执行失败，退出码: ${code}, message： ${stderrData || res}`)
             }
         });
         childProcess.stdout.on('data', function(data) {
@@ -270,7 +272,7 @@ async function runLocalShellCommand(command, options) {
         childProcess.stderr.on('data', (data) => {
           const cleaned = stripAnsi(data)
           stderrData += cleaned
-          sendLog(cleaned)  // 错误日志建议用不同标识，例如sendErrorLog
+          sendLog(stderrData)  // 错误日志建议用不同标识，例如sendErrorLog
         })
 
         // 监听错误事件
@@ -532,6 +534,8 @@ async function deploy(project) {
     });
     // 发送微信通知
     // sendWxNotice(project, finished)
+    // 推送机器人消息
+    sendRobotMessage(project, finished)
 }
 
 function isDockerEnvironment() {
@@ -557,9 +561,11 @@ const runDeploy = (data) => {
                 }
             }
             console.log('启动新线程')
+            // 从mongo中查找robot
+            const robotInfo = await robot.findOne({})
             const worker = new Worker(__filename, {
                 // workerData: JSON.parse(JSON.stringify(data._doc))
-                workerData: data
+                workerData: {...data, robotInfo: robotInfo.toJSON()}
             });
             global.activeWorkers[projectId] = worker
             worker.on('message', (d) => {

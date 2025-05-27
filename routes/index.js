@@ -4,6 +4,7 @@ const shell = require('shelljs')
 var project = require('../model/projects');
 var record = require('../model/record');
 var server = require('../model/server');
+var robot = require('../model/robot');
 var clone = require('../utils/clone')
 var deploy = require('../utils/deploy')
 var runDeploy = require('../utils/deploy_work')
@@ -689,6 +690,59 @@ router.get('/cancel_task', async (req, res) => {
     res.send({
       code: -1,
       msg: '缺少id',
+    });
+  }
+})
+
+// 设置机器人webhook
+router.post('/set_webhook', async (req, res) => {
+  const {webhook} = req.body
+  if (!webhook && webhook !== '') {
+    res.send({
+      code: -1,
+      msg: '缺少url',
+    });
+    return
+  }
+  try {
+    // 查询mongodb中的数据
+    const data = await robot.findOne({})
+    // 如果有更改
+    if (data && data.webhook !== webhook) {
+      // 更新
+      await robot.updateOne({}, {webhook})
+    } else if (!data) {
+      // 新增
+      await robot.create({webhook})
+    }
+    res.send({
+      code: 0,
+      msg: '设置成功',
+    });
+  } catch (e) {
+    res.send({
+      code: -1,
+      msg: '设置失败',
+      error: e
+    });
+  }
+})
+
+// 查询机器人webhook
+router.get('/get_webhook', async (req, res) => {
+  try {
+    // 查询mongodb中的数据
+    const data = await robot.findOne({})
+    res.send({
+      code: 0,
+      msg: '查询成功',
+      data
+    });
+  } catch (e) {
+    res.send({
+      code: -1,
+      msg: '查询失败',
+      error: e
     });
   }
 })
