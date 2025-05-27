@@ -247,6 +247,7 @@ async function runLocalShellCommand(command, options) {
     childProcess = shell.exec(command, { ...options, async: true });
 
     let res = ''
+    let stderrData = ''
     // 封装为 Promise
     return new Promise((resolve, reject) => {
         // 监听退出事件
@@ -255,7 +256,7 @@ async function runLocalShellCommand(command, options) {
             if (code === 0) {
                 resolve(res);
             } else {
-                reject(new Error(`命令执行失败，退出码: ${code}, message： ${res || 'null'}`));
+                reject(new Error(`命令执行失败，退出码: ${code}, message： ${stderrData || 'null'}`));
                 sendLog(`命令执行失败，退出码: ${code}`)
             }
         });
@@ -265,6 +266,12 @@ async function runLocalShellCommand(command, options) {
             res += stripAnsi(data)
             sendLog(stripAnsi(data))
         });
+        // 错误输出
+        childProcess.stderr.on('data', (data) => {
+          const cleaned = stripAnsi(data)
+          stderrData += cleaned
+          sendLog(cleaned)  // 错误日志建议用不同标识，例如sendErrorLog
+        })
 
         // 监听错误事件
         childProcess.on("error", (err) => {
@@ -409,7 +416,14 @@ async function deploy(project) {
 
             console.log('开始执行npm命令')
             // 若有打包命令则执行，否则默认npm run build:stage
-            errorMsg += await runLocalShellCommand('npm install', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
+            // 判断打包命令使用的是npm还是yarn还是pnpm
+            if (project.build.indexOf('yarn') !== -1) {
+                errorMsg += await runLocalShellCommand('yarn install', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
+            } else if (project.build.indexOf('pnpm') !== -1) {
+                errorMsg += await runLocalShellCommand('pnpm install', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
+            } else {
+              errorMsg += await runLocalShellCommand('npm install', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
+            }
             await isError(errorMsg)
             errorMsg += 'npm install完成<br>'
             errorMsg += await runLocalShellCommand(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
@@ -517,7 +531,7 @@ async function deploy(project) {
         }, 2000)
     });
     // 发送微信通知
-    sendWxNotice(project, finished)
+    // sendWxNotice(project, finished)
 }
 
 function isDockerEnvironment() {

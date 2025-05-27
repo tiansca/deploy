@@ -3,7 +3,7 @@
  */
 var mongoose = require('mongoose');
 // var url ="mongodb://root:tianshicong@localhost:27017/deploy-dev";
-var url ="mongodb://root:tianshicong@192.168.11.25:27017/deploy-remote";
+var url ="mongodb://root:tianshicong@localhost:27017/deploy-remote";
 if (process.env.DOCKER === 'yes') {
     if (process.env.MOMGO_DOCKER === 'yes') {
         url = "mongodb://root:tianshicong@mongo:27017/deploy"; // docker容器内mongo服务

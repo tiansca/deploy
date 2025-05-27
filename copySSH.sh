@@ -12,3 +12,11 @@ else
   echo "错误：未找到 npm 命令，请确保 Node.js 已安装。" >&2
   exit 1
 fi
+# 全局安装 yarn
+if command -v npm >/dev/null 2>&1; then
+  echo "正在安装 yarn..."
+  npm install -g yarn
+else
+  echo "错误：未找到 npm 命令，请确保 Node.js 已安装。" >&2
+  exit 1
+fi
