@@ -50,9 +50,12 @@ function runTask () {
     } else {
         console.log('队列为空，无等待的任务')
     }
-    global.sseClients.forEach(client => {
+    setTimeout(function (){
+      global.sseClients.forEach(client => {
         sendTaskList(client)
-    });
+      });
+    }, 500)
+
 }
 // 发送日志
 const sendLog = (logContent) => {
@@ -580,7 +583,9 @@ const runDeploy = (data) => {
                 } else if(d.type === 'log') {
                     global.sseClients.forEach(client => {
                         client.write(`data: ${JSON.stringify({ log: d.logContent, type: 'log' })}\n\n`);
-                        sendTaskList(client)
+                        // setTimeout(function () {
+                        //   sendTaskList(client)
+                        // }, 500)
                     });
                 } else if(d.type === 'clearLog') {
                     global.sseClients.forEach(client => {

@@ -63,24 +63,17 @@ router.use(function (req, res, next) {
   if (whiteList.includes(req.path)) {
     next()
   } else {
-    const token = req.cookies.token
-    if (!token || JSON.stringify(token) === '{}') {
+    // 获取header中的SecretKey字段
+    const secretkey = req.headers['secretkey']
+    console.log('secretkey', secretkey)
+    if (secretkey !== 'auth_gate_deploy') {
       res.send({
         code: -1,
-        msg: '请先登录'
+        msg: '签名错误'
       })
-    } else {
-      try {
-        // 解析token
-        JSON.parse(Buffer.from(token, 'base64').toString('ascii'))
-        next()
-      } catch (e) {
-        res.send({
-          code: -1,
-          msg: '请先登录'
-        })
-      }
+      return
     }
+    next()
   }
 })
 
@@ -268,14 +261,9 @@ router.get('/deploy', function(req, res, next) {
           data._id = data._id.toString()
           const newData = await getServer(data)
           console.log('项目=>', newData)
-          // 获取用户信息
-          const token = req.cookies.token
-          if (token) {
-            const userObj = JSON.parse(Buffer.from(token, 'base64').toString('ascii'))
-            if (userObj.username) {
-              newData.triggerBy = userObj.username
-            }
-          }
+          // 从header获取用户信息
+          const userName = req.headers.username
+          newData.triggerBy = userName
           task.addTask(newData)
         } catch (e) {
           console.log(e)
