@@ -230,7 +230,9 @@ function getWindowsPath(path, root =  false) {
     // 删除
     path = path.substring(1)
   }
-  return path.replace(/\//g, '\\')
+  // 替换/为\
+  path = path.replace(/\//g, '\\')
+  return path
 }
 
 async function emptyFolder(dirPath, client, project) {
