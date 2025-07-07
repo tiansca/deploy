@@ -18,6 +18,7 @@ const detectDangerousDeletes = require("./detectDangerousDeletes");
 const stripAnsi = require('strip-ansi');
 const sendRobotMessage = require("./sendRobotMessage");
 const robot = require("../model/robot");
+const smb2 = require("v9u-smb2");
 // let mongoose=require('mongoose');
 shell.config.execEncoding = 'utf8';
 // 记录shell子进程
@@ -83,6 +84,14 @@ const zipDist = async(project) => {
         await fs.promises.mkdir(projectZipPath)
     }
     const distZipPath = path.resolve(zipPath, './' + (project.localPath || project.name), './dist.zip')
+    // 如果存在，则修改名称为dist_timestamp.zip
+    try {
+      await fs.promises.access(distZipPath)
+      await fs.promises.rename(distZipPath, path.resolve(projectZipPath, './dist_' + Date.now() + '.zip'))
+    } catch (error) {
+      console.log('不存在旧包，不需要备份')
+    }
+
     console.log('压缩...')
     sendLog('压缩中...')
     try {
@@ -213,6 +222,162 @@ const uploadZipBySSH = async(project) => {
         return Promise.reject(error)
         //process.exit() // 退出流程
     }
+}
+
+// 将路径中的/ 转为 \
+function getWindowsPath(path, root =  false) {
+  if (path[0] === '/' && !root) {
+    // 删除
+    path = path.substring(1)
+  }
+  return path.replace(/\//g, '\\')
+}
+
+async function emptyFolder(dirPath, client, project) {
+  // 删除文件夹下的所有文件
+  try {
+    const files = await client.readdir(dirPath, {stats: true});
+    await deleteFiles(files, client, dirPath);
+  } catch (error) {
+    if (error.code === 'STATUS_DIRECTORY_NOT_EMPTY') {
+      // 重新连接
+      client.disconnect()
+      client = initSMB(project)
+      await emptyFolder(dirPath, client, project)
+    } else {
+      throw  error
+    }
+  }
+}
+// 遍历文件，删除
+async function deleteFiles(files, client, parentPath = '') {
+  return new Promise(async (resolve, reject) => {
+    try {
+      for (let i = 0; i < files.length; i++) {
+        // 判断是文件还是文件夹
+        const file = files[i]
+        const filePath = parentPath + '\\' + file.name
+        if (file.isDirectory()) {
+          const subFiles = await client.readdir(filePath, {stats: true})
+          if (subFiles.length > 0) {
+            await deleteFiles(subFiles, client, filePath)
+          }
+          const confirmSub = await client.readdir(filePath)
+          await client.rmdir(filePath)
+        } else {
+          await client.unlink(filePath)
+        }
+      }
+      resolve()
+    } catch (error) {
+      reject(error)
+    }
+  })
+}
+
+async function uploadDir(localPath, remotePath, client, project) {
+  client.disconnect()
+  client = initSMB(project)
+  // 读取文件夹下的所有文件
+  const files = await fs.promises.readdir(localPath);
+  await uploadFiles(files, remotePath, client, localPath, remotePath, project)
+}
+
+function uploadFiles(files, remotePath, client, localParentPath, remoteParentPath, project) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        const filePath = localParentPath + '\\' + file
+        const remoteFilePath = remoteParentPath + '\\' + file
+        // 判断file是文件夹还是文件
+        const stat = await fs.promises.stat(filePath)
+        // console.log('stat', stat)
+        if (stat.isDirectory()) {
+          await client.mkdir(remoteFilePath)
+          await uploadDir(filePath, remoteFilePath, client, project)
+        } else {
+          await uploadFile(filePath, remoteFilePath, client)
+        }
+      }
+      resolve()
+    } catch ( error) {
+      reject(error)
+    }
+  })
+}
+
+async function uploadFile(localFilePath, remoteFilePath, client) {
+  return new Promise((resolve, reject) => {
+    const readStream = fs.createReadStream(localFilePath);
+    client.createWriteStream(remoteFilePath, (err, writeStream) => {
+      if (err) return reject(err);
+
+      readStream.pipe(writeStream)
+        .on('error', reject)
+        .on('finish', resolve);
+    });
+  });
+}
+
+let smbClient =  null
+// 初始化连接
+function initSMB(project) {
+  console.log('initSMB', getWindowsPath(project.ip,  true), project.username, project.password)
+  smbClient = new smb2({
+    share: getWindowsPath(project.ip, true),       // 共享根目录
+    username: project.username,
+    password: project.password,
+    domain: '',
+    // port: 445, // 默认端口
+  });
+  return smbClient
+}
+
+// 传送zip文件到window服务器
+const uploadZipBySMB = async(project) => {
+  if (!project.path || project.path === '/') {
+    console.log('路径不完整', project.path)
+    return false
+  }
+  let onlinePath = project.path
+  onlinePath = onlinePath.replace('///', '/')
+  onlinePath = onlinePath.replace('//', '/')
+  onlinePath = getWindowsPath(onlinePath)
+  console.log('onlinePath', onlinePath, project)
+  try {
+    initSMB(project)
+    // 判断部署路径是否存在
+    const exist = await smbClient.exists(onlinePath)
+    if (!exist) {
+      // 创建目录
+      await smbClient.mkdir(onlinePath)
+    } else {
+      // 清空文件夹
+      sendLog('清空中...')
+      if (!onlinePath) {
+        throw new Error('部署路径不能为空')
+      }
+      await emptyFolder(onlinePath, smbClient,  project)
+    }
+    // 获取本地输出目录
+    let outputDir = project.outputDir || 'dist'
+    if (outputDir[0] === '/') {
+      outputDir = outputDir.replace('/', '')
+    }
+    const distDir = path.resolve(storagePath, './' + (project.localPath || project.name), './', outputDir)
+    sendLog('上传中...')
+    // 遍历输出目录文件，上传至线上
+    await uploadDir(distDir, onlinePath, smbClient, project)
+    sendLog('部署成功！')
+    // 断开连接
+    smbClient.disconnect()
+    return Promise.resolve('上传成功')
+  } catch (error) {
+    console.log(error)
+    return Promise.reject(error)
+  }
+
 }
 
 //读取路径信息
@@ -441,7 +606,12 @@ async function deploy(project) {
                 errorMsg += '压缩代码成功<br>'
                 await sleep(2000)
                 // 上传服务器
-                await uploadZipBySSH(project)
+                if (project.protocol === 'ssh') {
+                  await uploadZipBySSH(project)
+                } else {
+                  await uploadZipBySMB(project)
+                }
+
                 errorMsg += '上传服务器成功<br>'
             } else {
                 const copyRes = await copyDist(project)
@@ -460,7 +630,12 @@ async function deploy(project) {
             if (project.ip) {
                 // 上传服务器
                 await zipDist(project)
-                await uploadZipBySSH(project)
+                if (project.protocol === 'ssh') {
+                  await uploadZipBySSH(project)
+                } else {
+                  await uploadZipBySMB(project)
+                }
+                // await uploadZipBySSH(project)
                 await isError(errorMsg)
                 errorMsg += '上传服务器成功<br>'
                 // 执行启动脚本
@@ -566,9 +741,15 @@ const runDeploy = (data) => {
             console.log('启动新线程')
             // 从mongo中查找robot
             const robotInfo = await robot.findOne({})
+            const workerData = {...data}
+            if (robotInfo) {
+                console.log('机器人已配置')
+                workerData.robotInfo = robotInfo.toJSON()
+            } else {
+                console.log('未配置机器人')
+            }
             const worker = new Worker(__filename, {
-                // workerData: JSON.parse(JSON.stringify(data._doc))
-                workerData: {...data, robotInfo: robotInfo.toJSON()}
+                workerData: workerData
             });
             global.activeWorkers[projectId] = worker
             worker.on('message', (d) => {

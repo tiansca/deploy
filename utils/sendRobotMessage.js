@@ -1,10 +1,10 @@
 const request = require("request");
 
 const sendRobotMessage = async (project, finished) => {
-  console.log('sendRobotMessage', project.robotInfo, project.robotInfo.webhook)
   if (!project.robotInfo || !project.robotInfo.webhook) {
     return
   }
+  console.log('sendRobotMessage', project.robotInfo, project.robotInfo.webhook)
   const webhook = project.robotInfo.webhook
   // name, type, branch, tag, server
   const content = `##### 项目：${project.name}

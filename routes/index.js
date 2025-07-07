@@ -46,6 +46,7 @@ const getServer = async (project) => {
                   // project.rootPath = server.rootPath
                   project.privateKey = server.privateKey
                   project.connectionType = server.connectionType
+                  project.protocol = server.protocol || 'ssh'
                   resolve(project)
               }
           })
@@ -420,7 +421,8 @@ router.post('/add_server', function (req, res, next) {
         password:req.body.password,
         connectionType:req.body.connectionType,
         privateKey:req.body.privateKey,
-        username: req.body.username
+        username: req.body.username,
+        protocol: req.body.protocol
     };
     server.findOne({ip:postData.name},function (err, data) {
         if(err){
@@ -447,7 +449,8 @@ router.post('/update_server', function(req, res, next) {
         username: req.body.username,
         connectionType:req.body.connectionType,
         privateKey:req.body.privateKey,
-        _id: req.body._id
+        _id: req.body._id,
+        protocol: req.body.protocol
     };
     server.findOne({_id:postData._id},function (err, data) {
         if(err || !data){

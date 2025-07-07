@@ -18,6 +18,10 @@ var serverSchema = new Schema({
     status:{
         type:Boolean,
         default:true
+    },
+    protocol: {
+        type: String,
+        default: 'ssh'
     }
 }, {
     versionKey: false,

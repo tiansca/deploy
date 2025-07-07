@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "node --experimental-worker ./bin/www"
+    "start": "cross-env NODE_OPTIONS=--openssl-legacy-provider node --experimental-worker ./bin/www"
   },
   "dependencies": {
     "bash-parser": "^0.5.0",
@@ -15,12 +15,15 @@
     "mongoose": "^5.9.20",
     "morgan": "~1.9.1",
     "request": "^2.88.2",
+    "smb2": "^0.2.11",
     "strip-ansi": "^5.2.0",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "v9u-smb2": "^1.0.6"
   },
   "devDependencies": {
     "chalk": "^4.0.0",
     "compressing": "^1.5.1",
+    "cross-env": "^7.0.3",
     "inquirer": "^7.1.0",
     "node-ssh": "^13.2.0",
     "ora": "^4.0.3",
