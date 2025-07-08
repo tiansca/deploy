@@ -7,12 +7,17 @@ const sendRobotMessage = async (project, finished) => {
   console.log('sendRobotMessage', project.robotInfo, project.robotInfo.webhook)
   const webhook = project.robotInfo.webhook
   // name, type, branch, tag, server
-  const content = `##### 项目：${project.name}
-##### 结果：${finished ? '成功' : '失败'}
-##### ${project.eventType === 'push' ? '分支' : '标签'}：${project.eventType === 'push' ? project.branch : project.tagName}
-##### 部署至：${project.ip || '本机'}
-##### 部署路径 ${project.path}
-###### 详细内容请查看日志`
+  const content = `**项目**：${project.name}
+
+**结果**：${finished ? '成功' : '失败'}
+
+**${project.eventType === 'push' ? '分支' : '标签'}**：${project.eventType === 'push' ? project.branch : project.tagName}
+
+**部署至**：${project.ip || '本机'}
+
+**部署路径**: ${project.path}
+
+*[详细内容请查看日志](http://192.168.1.249:8809/)*`
   request({
     url: webhook,
     method: "POST",

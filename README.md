@@ -29,3 +29,15 @@ path.js 里配置本地项目的路径信息，添加项目后，git clone会在
 
 服务器连接方式提供用户名密码和密钥两种方式，密钥需要填写私钥的本地路径
 
+**项目**：${project.name}
+
+**结果**：${finished ? '成功' : '失败'}
+
+**${project.eventType === 'push' ? '分支' : '标签'}**：${project.eventType === 'push' ? project.branch : project.tagName}
+
+**部署至**：${project.ip || '本机'}
+
+**部署路径**: ${project.path}
+
+*[详细内容请查看日志](http://192.168.1.249:8809/)*
+
