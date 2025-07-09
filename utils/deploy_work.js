@@ -290,7 +290,7 @@ function uploadFiles(files, remotePath, client, localParentPath, remoteParentPat
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        const filePath = localParentPath + '\\' + file
+        const filePath = path.resolve(localParentPath, file)
         const remoteFilePath = remoteParentPath + '\\' + file
         // 判断file是文件夹还是文件
         const stat = await fs.promises.stat(filePath)
