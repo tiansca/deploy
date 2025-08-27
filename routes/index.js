@@ -4,12 +4,14 @@ const shell = require('shelljs')
 var project = require('../model/projects');
 var record = require('../model/record');
 var server = require('../model/server');
+var robot = require('../model/robot');
 var clone = require('../utils/clone')
 var deploy = require('../utils/deploy')
 var runDeploy = require('../utils/deploy_work')
 var rmdirPromise = require('../utils/delete')
 const {v4:uuidv4} = require('uuid');
 const os = require('os');
+const task = require('../utils/task.js')
 
 
 
@@ -21,6 +23,7 @@ const saveShell = require("../utils/saveShell");
 const mongoose = require("mongoose");
 const deleteDir = require("../utils/delete");
 const {promises} = require("node:fs");
+const fs = require("fs");
 // const uploadZipBySSH = require("../utils/uploadZipBySSH");
 
 const getServer = async (project) => {
@@ -52,6 +55,35 @@ const getServer = async (project) => {
     })
 }
 
+// 中间件，获取token
+// 白名单
+const whiteList = ['/users/login', '/deploy', '/task', '/add_record']
+router.use(function (req, res, next) {
+  console.log('req.path', req.path)
+  if (whiteList.includes(req.path)) {
+    next()
+  } else {
+    const token = req.cookies.token
+    if (!token || JSON.stringify(token) === '{}') {
+      res.send({
+        code: -1,
+        msg: '请先登录'
+      })
+    } else {
+      try {
+        // 解析token
+        JSON.parse(Buffer.from(token, 'base64').toString('ascii'))
+        next()
+      } catch (e) {
+        res.send({
+          code: -1,
+          msg: '请先登录'
+        })
+      }
+    }
+  }
+})
+
 /* GET home page. */
 router.get('/', function(req, res, next) {
   // console.log(req)
@@ -76,11 +108,16 @@ router.post('/add_project', function(req, res, next) {
     startShell: req.body.startShell,
     tagPrefixes: req.body.tagPrefixes || ''
   };
-  project.findOne({name:postData.name, branch:postData.branch},function (err, data) {
+  // 判断本地目录是否被占用
+  let searchParams = {$or: [{ localPath: '',  name: postData.outputDir}, { localPath: postData.localPath }]}
+  if (!req.body.localPath || req.body.name === req.body.localPath) {
+    searchParams = {$or: [{ localPath: '',  name: req.body.name}, { localPath: req.body.name }]}
+  }
+  project.findOne(searchParams,function (err, data) {
     if(err){
       res.send({code:-1,msg:'服务器错误'})
     }else if (data) {
-      res.send({code:-2,msg:'项目已经存在'})
+      res.send({code:-2,msg:'本地目录已被占用'})
     } else {
       project.create(postData, async function (err, data) {
         if (err) {
@@ -102,6 +139,19 @@ router.post('/add_project', function(req, res, next) {
   })
   // res.send(req.body)
 });
+async function doTask(taskList) {
+  if (!taskList.length) {
+    return
+  }
+  for (let i = 0; i < taskList.length; i++) {
+    try {
+      console.log('添加任务=>', taskList[i].name)
+      task.addTask(taskList[i])
+    } catch (e) {
+      console.log(e)
+    }
+  }
+}
 router.post('/deploy', function(req, res, next) {
   console.log('分支或tag=>', req.body.ref)  // refs/heads/dev
   console.log('项目=>', req.body?.project?.name)
@@ -128,42 +178,50 @@ router.post('/deploy', function(req, res, next) {
       console.log('项目不存在')
       res.send({data: -1, msg: '项目不存在'})
     } else {
-      const list = data
+      let list = data || []
+      // 如果有tagName，则判断tagName是否在tagPrefixes中
+      if (tagName) {
+        list = list.filter(item => {
+          return item.tagPrefixes && tagName.startsWith(item.tagPrefixes)
+        })
+      }
       if (!list.length) {
         console.log('没有找到项目')
         res.send({data: -4, msg: '没有找到项目'})
         return
       }
-      let projectData = list[0]
-      // 判断事件有无tagName
-      if (tagName) {
-        // 判断tagName是否在tagPrefixes中
-        for (const item of list) {
-          if (tagName.startsWith(item.tagPrefixes)) {
-            projectData = item
-            break
+      const taskList = []
+      let hasError = false
+      for (let projectData of list) {
+        if (projectData.status) {
+          try {
+            // deploy(data)
+            projectData = projectData.toObject()
+            projectData._id = projectData._id.toString()
+            projectData.tagName = tagName
+            const newData = await getServer(projectData)
+            console.log('project', newData)
+            newData.triggerBy = 'git'
+            taskList.push(newData)
+          } catch (e) {
+            console.log(e)
+            hasError = true
           }
+        } else {
+          console.log('项目没有开启自动部署')
         }
-     }
-      if (projectData.status) {
-        try {
-          // deploy(data)
-          projectData = projectData.toObject()
-          projectData._id = projectData._id.toString()
-          projectData.tagName = tagName
-          const newData = await getServer(projectData)
-          console.log('project', newData)
-          runDeploy(newData)
-          res.send({code: 0, msg: '启动部署'})
-        } catch (e) {
-          console.log(e)
-          res.send({code: -1, msg: e || '部署失败'})
+      }
+      doTask(taskList)
+      if (hasError) {
+        if (taskList.length) {
+          res.send({code: -1, msg: `部分启动失败：${taskList.length}任务启动成功`})
+        } else {
+          res.send({code: -1, msg: '启动部署失败'})
         }
       } else {
-        console.log('项目没有开启自动部署')
-        res.send({data: -2, msg: '项目没有开启自动部署'})
+        res.send({code: 0, msg: `启动部署：${taskList.length}个部署任务`})
       }
-    }
+     }
   })
 });
 router.get('/list', function(req, res, next) {
@@ -210,7 +268,15 @@ router.get('/deploy', function(req, res, next) {
           data._id = data._id.toString()
           const newData = await getServer(data)
           console.log('项目=>', newData)
-          runDeploy(newData)
+          // 获取用户信息
+          const token = req.cookies.token
+          if (token) {
+            const userObj = JSON.parse(Buffer.from(token, 'base64').toString('ascii'))
+            if (userObj.username) {
+              newData.triggerBy = userObj.username
+            }
+          }
+          task.addTask(newData)
         } catch (e) {
           console.log(e)
         }
@@ -231,6 +297,7 @@ router.post('/update', function(req, res, next) {
     _id: req.body._id,
     build: req.body.build,
     localPath: req.body.localPath || req.body.name,
+    outputDir: req.body.outputDir || '',
     buildMode: req.body.buildMode,
     eventType: req.body.eventType,
     buildShell: req.body.buildShell,
@@ -241,11 +308,24 @@ router.post('/update', function(req, res, next) {
     if(err || !data){
       res.send({code:1,msg:'项目不存在'})
     }else {
-      project.update({_id:postData._id}, postData, function (err, ret) {
-        if(err){
-          res.send({code:2,msg:"编辑失败！"})
-        }else {
-          res.send({code:0,msg:"编辑成功！"})
+      // 判断本地路径是否被占用
+      let searchParams = {_id: {$ne: postData._id}, $or: [{ localPath: '',  name: postData.outputDir}, { localPath: postData.localPath }]}
+      if (!req.body.localPath || req.body.name === req.body.localPath) {
+        searchParams = {_id: {$ne: postData._id}, $or: [{ localPath: '',  name: req.body.name}, { localPath: req.body.name }]}
+      }
+      project.findOne(searchParams,function (err, data) {
+        if (err) {
+          res.send({code: -1, msg: '服务器错误'})
+        } else if (data) {
+          res.send({code: -2, msg: '本地目录已被占用'})
+        } else {
+          project.update({_id:postData._id}, postData, function (err, ret) {
+            if(err){
+              res.send({code:2,msg:"编辑失败！"})
+            }else {
+              res.send({code:0,msg:"编辑成功！"})
+            }
+          })
         }
       })
     }
@@ -284,7 +364,8 @@ router.post('/add_record', function(req, res, next) {
       ip: req.body.ip,
       path: req.body.path,
       log: req.body.log,
-      success: req.body.success
+      success: req.body.success,
+      triggerBy: req.body.triggerBy
     }, function (err, data) {
       if (!err) {
         console.log('记录成功')
@@ -300,21 +381,48 @@ router.post('/add_record', function(req, res, next) {
 });
 router.get('/record_list', function(req, res, next) {
   const id = req.query.project_id
-  if (!id) {
-    res.send({code: -1, msg: '缺少id'})
-    return
-  }
-  record.find({project_id: id}, function (err,data) {
-    if(err){
-      res.send({code:1,msg:'查询失败'})
-    }else {
-      for (let a = 0; a < data.length; a++) {
-        data[a] = data[a].toObject()
-        data[a].shijian = data[a].createTime.valueOf()
+  if (id) {
+    record.find({project_id: id}, {log: 0},function (err,data) {
+      if(err){
+        res.send({code:1,msg:'查询失败'})
+      }else {
+        for (let a = 0; a < data.length; a++) {
+          data[a] = data[a].toObject()
+          data[a].shijian = data[a].createTime.valueOf()
+        }
+        res.send({code:0,data:data})
       }
-      res.send({code:0,data:data})
-    }
-  }).sort({createTime: -1}).limit(100)
+    }).sort({createTime: -1}).limit(100)
+  } else {
+    record.find({}, {log: 0},function (err,data) {
+      if(err){
+        res.send({code:1,msg:'查询失败'})
+      }else {
+        for (let a = 0; a < data.length; a++) {
+          data[a] = data[a].toObject()
+          data[a].shijian = data[a].createTime.valueOf()
+        }
+        res.send({code:0,data:data})
+      }
+    }).sort({createTime: -1}).limit(100)
+  }
+
+});
+
+// 日志详情
+router.get('/record_detail', function(req, res, next) {
+  const id = req.query.id
+  if (id) {
+    record.findOne({_id:id},function (err, data) {
+      if(err){
+        res.send({code:1,msg:'查询失败'})
+      }else {
+        res.send({code:0,data:data.log})
+      }
+    })
+  } else {
+    res.send({code: -1, msg: '缺少id'})
+  }
 });
 router.post('/add_server', function (req, res, next) {
     var postData = {
@@ -427,7 +535,7 @@ router.post('/add_shell', async function (req, res, next) {
         await saveShell(getFullPath(name, 'shell'), content)
         res.send({code: 0, msg: '保存成功', data: {name}})
     } catch (e) {
-        res.send({code: -1, msg: '保存失败', error: e})
+        res.send({code: -1, msg: e || '保存失败', error: e})
     }
 })
 router.post('/update_shell', async function (req, res, next) {
@@ -441,7 +549,7 @@ router.post('/update_shell', async function (req, res, next) {
         await saveShell(getFullPath(name, 'shell'), content)
         res.send({code: 0, msg: '保存成功', data: {name}})
     } catch (e) {
-        res.send({code: -1, msg: '保存失败', error: e})
+        res.send({code: -1, msg: e || '保存失败', error: e})
     }
 })
 
@@ -494,17 +602,148 @@ router.get('/clone_project', async function (req, res, next) {
       return
     }
     const localPath = getFullPath(data.localPath || data.name, 'storage')
-    // 重命名localPath
-    // 生成随机字符串
-    const newLocalPath = getFullPath(`${uuidv4()}_${data.localPath || data.name}`, 'storage')
-    await promises.rename(localPath, newLocalPath)
-    await clone(data.url, localPath)
+    // 判断localPath是否存在
+    try {
+        await fs.promises.access(localPath)
+        // 重命名localPath
+        // 生成随机字符串
+        const newLocalPath = getFullPath(`${uuidv4()}_${data.localPath || data.name}`, 'storage')
+        await promises.rename(localPath, newLocalPath)
+        deleteDir(newLocalPath)
+    } catch (e) {
+      console.log(e)
+    }
+
+    await clone(data.url, data.localPath || data.name)
     res.send({code: 0, msg: '克隆成功', data})
-    // 删除旧的文件
-    deleteDir(newLocalPath)
   }catch (e) {
     console.log(e)
     res.send({code: -1, msg: '克隆失败', error: e})
+  }
+})
+
+router.get('/task', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  // 发送初始状态
+  task.sendTaskList(res);
+
+  // 添加新客户端
+  global.sseClients.add(res);
+
+  // 断开连接处理
+  req.on('close', () => {
+    global.sseClients.delete(res);
+    res.end();
+  });
+  if (global.activeWorkers) {
+    const keys = Object.keys(global.activeWorkers);
+    for (const key of keys) {
+      const worker = global.activeWorkers[key];
+      worker.postMessage({
+        type: 'initLog',
+      });
+    }
+  }
+});
+
+// 终止当前任务
+router.get('/stop_curr', async (req, res) => {
+  if (global.activeWorkers) {
+    // 获取keys
+    const keys = Object.keys(global.activeWorkers);
+    for (const key of keys) {
+      const worker = global.activeWorkers[key];
+      worker.postMessage({
+        type: 'stop',
+      });
+      await worker.terminate()
+    }
+    res.send({
+      code: 0,
+      msg: '停止成功',
+    });
+  }
+})
+
+// 取消等待中的任务
+router.get('/cancel_task', async (req, res) => {
+  if (req.query.id) {
+    console.log(req.query.id)
+    task.removeTask(req.query.id)
+    try {
+      res.send({
+        code: 0,
+        msg: '取消成功',
+      });
+    } catch (e) {
+      res.send({
+        code: -1,
+        msg: '取消失败',
+        error: e
+      });
+    }
+  } else {
+    res.send({
+      code: -1,
+      msg: '缺少id',
+    });
+  }
+})
+
+// 设置机器人webhook
+router.post('/set_webhook', async (req, res) => {
+  const {webhook} = req.body
+  if (!webhook && webhook !== '') {
+    res.send({
+      code: -1,
+      msg: '缺少url',
+    });
+    return
+  }
+  try {
+    // 查询mongodb中的数据
+    const data = await robot.findOne({})
+    // 如果有更改
+    if (data && data.webhook !== webhook) {
+      // 更新
+      await robot.updateOne({}, {webhook})
+    } else if (!data) {
+      // 新增
+      await robot.create({webhook})
+    }
+    res.send({
+      code: 0,
+      msg: '设置成功',
+    });
+  } catch (e) {
+    res.send({
+      code: -1,
+      msg: '设置失败',
+      error: e
+    });
+  }
+})
+
+// 查询机器人webhook
+router.get('/get_webhook', async (req, res) => {
+  try {
+    // 查询mongodb中的数据
+    const data = await robot.findOne({})
+    res.send({
+      code: 0,
+      msg: '查询成功',
+      data
+    });
+  } catch (e) {
+    res.send({
+      code: -1,
+      msg: '查询失败',
+      error: e
+    });
   }
 })
 

@@ -14,8 +14,16 @@ const sendWxNotice = require("./sendWxNotice");
 const simpleDelete = require("./simpleDelete");
 const simpleCopy = require("./simpleCopy");
 const {v4:uuidv4} = require('uuid');
+const detectDangerousDeletes = require("./detectDangerousDeletes");
+const stripAnsi = require('strip-ansi');
+const sendRobotMessage = require("./sendRobotMessage");
+const robot = require("../model/robot");
 // let mongoose=require('mongoose');
-
+shell.config.execEncoding = 'utf8';
+// 记录shell子进程
+let childProcess = null
+// 记录耗时
+const startTime = Date.now()
 
 //等待两秒
 // const wait2s = async () => {
@@ -23,6 +31,37 @@ const {v4:uuidv4} = require('uuid');
 //         console.log('......')
 //     }, 2000)
 // }
+function sendTaskList(res) {
+    res.write(`data: ${JSON.stringify({
+        tasks: global.waitQueue,
+        activeTask: global.runWork,
+        type: 'taskList'
+    })}\n\n`);
+}
+// 从等待队列中取一个任务运行
+function runTask () {
+    // 运行任务
+    if (!global.runWork && global.waitQueue.length) {
+        global.runWork = global.waitQueue.shift()
+        runDeploy(global.runWork)
+        console.log('运行新任务')
+    } else if(global.runWork) {
+        console.log('其他任务正在运行中，无法运行新的任务')
+    } else {
+        console.log('队列为空，无等待的任务')
+    }
+    global.sseClients.forEach(client => {
+        sendTaskList(client)
+    });
+}
+// 发送日志
+const sendLog = (logContent) => {
+    parentPort.postMessage({type: 'log', logContent:logContent + '<br/>'})
+}
+
+const clearLog = (logContent) => {
+    parentPort.postMessage({type: 'clearLog', logContent:logContent + '<br/>'})
+}
 
 // 压缩代码
 const zipDist = async(project) => {
@@ -42,12 +81,15 @@ const zipDist = async(project) => {
     }
     const distZipPath = path.resolve(zipPath, './' + (project.localPath || project.name), './dist.zip')
     console.log('压缩...')
+    sendLog('压缩中...')
     try {
         await zipFile.zip.compressDir(distDir, distZipPath)
         console.log('压缩成功')
+        sendLog('压缩成功!')
         // successLog('压缩成功!')
     } catch (error) {
         console.log('压缩错误', error)
+        sendLog('压缩失败!' + error.message || '')
         // errorLog(error)
         // errorLog('压缩失败, 退出程序!')
         //process.exit() // 退出流程
@@ -139,22 +181,29 @@ const uploadZipBySSH = async(project) => {
         }
         // 线上目标文件清空
         console.log('正在清空...')
+        sendLog('清空中...')
         await clearOldFile(onlinePath)
         console.log('正在上传...')
+        sendLog('上传中...')
         const distZipPath = path.resolve(zipPath, './' + (project.localPath || project.name), './dist.zip')
         console.log('distZipPath', distZipPath)
         await SSH.putFiles([{ local: distZipPath, remote: onlinePath + '/dist.zip' }]) // local 本地 ; remote 服务器 ;
         console.log('正在解压...')
+        sendLog('解压中...')
         await runCommand('unzip ./dist.zip', onlinePath) // 解压
         await runCommand(`rm -rf ${onlinePath}/dist.zip`, onlinePath) // 解压完删除线上压缩包
         // 将目标目录的dist里面文件移出到目标文件
         // 举个例子 假如我们部署在 /test/html 这个目录下 只有一个网站, 那么上传解压后的文件在 /test/html/dist 里
         // 需要将 dist 目录下的文件 移出到 /test/html ;  多网站情况, 如 /test/html/h5  或者 /test/html/admin 都和上面同样道理
-        await runCommand(`mv -f ${onlinePath}/dist/*  ${onlinePath}`, onlinePath)
-        await runCommand(`rm -rf ${onlinePath}/dist`, onlinePath) // 移出后删除 dist 文件夹
+        // 产出物路径不一定是dist,需要取产出物路径的最后一级
+        let outputDir = project.outputDir || 'dist'
+        const zipName = path.basename(outputDir) // 解压后的文件夹名
+        await runCommand(`mv -f ${onlinePath}/${zipName}/*  ${onlinePath}`, onlinePath)
+        await runCommand(`rm -rf ${onlinePath}/${zipName}`, onlinePath) // 移出后删除 dist 文件夹
         SSH.dispose() // 断开连接
         const id = project._id.toString()
         console.log(id)
+        sendLog('部署成功！')
         return Promise.resolve('上传成功')
     } catch (error) {
         console.log(error)
@@ -185,25 +234,79 @@ const isError = (str) => {
     }
 }
 
+async function runLocalShellCommand(command, options) {
+    if (!options) {
+        options = {}
+    }
+    // 检查是否有删除命令
+    const isDelete = detectDangerousDeletes(command)
+    if (isDelete) {
+        return Promise.reject('包含不安全命令，终止')
+    }
+    console.log('执行命令', command, JSON.stringify(options))
+    sendLog('执行命令：' + command)
+    // 创建子进程
+    childProcess = shell.exec(command, { ...options, async: true });
+
+    let res = ''
+    let stderrData = ''
+    // 封装为 Promise
+    return new Promise((resolve, reject) => {
+        // 监听退出事件
+        childProcess.on("exit", (code) => {
+            console.log('shell code', code)
+            if (code === 0) {
+                resolve(res);
+            } else {
+                reject(new Error(`命令执行失败，退出码: ${code}, message： ${stderrData || res}`));
+                sendLog(`命令执行失败，退出码: ${code}, message： ${stderrData || res}`)
+            }
+        });
+        childProcess.stdout.on('data', function(data) {
+            /* ... do something with data ... */
+            // console.log(data)
+            res += stripAnsi(data)
+            sendLog(stripAnsi(data))
+        });
+        // 错误输出
+        childProcess.stderr.on('data', (data) => {
+          const cleaned = stripAnsi(data)
+          stderrData += cleaned
+          sendLog(stderrData)  // 错误日志建议用不同标识，例如sendErrorLog
+        })
+
+        // 监听错误事件
+        childProcess.on("error", (err) => {
+            sendLog(`命令执行失败，错误信息: ${err.message}`)
+            reject(err);
+        });
+    });
+}
+
 const runShell = async(project, shellType = 'buildShell') => {
     console.log('开始执行shell脚本', project[shellType])
+    sendLog('开始执行shell脚本：' + project[shellType])
     const directoryName = project.localPath || project.name
     // 在项目路径下运行shell脚本
-    const res = await shell.exec(getFullPath(project[shellType], 'shell'), {cwd: path.resolve(storagePath, directoryName)})
-    if (res.code === 0) {
-        return `执行脚本${project[shellType]}<br>` + res.stdout + '<br>'
-    } else {
-        return `执行脚本失败${project[shellType]}<br> error: ` + res.stderr + '<br>'
+    try {
+        const res = await runLocalShellCommand(getFullPath(project[shellType], 'shell'), {cwd: path.resolve(storagePath, directoryName)})
+        sendLog(res)
+        return `执行脚本${project[shellType]}<br>` + res + '<br>'
+    } catch (e) {
+        sendLog('执行脚本失败' + (e.message || e))
+        return `执行脚本失败${project[shellType]}<br> error: ` + (e.message || e) + '<br>'
     }
 }
 
 // 执行远程脚本
 const runRemoteShell = async(localPath, remotePath) => {
     console.log('runRemoteShell')
+    sendLog('开始执行远程shell脚本')
     // 随机生成文件名
     const shellName = `${uuidv4()}.sh`
     let shellPath = remotePath + '/' + shellName
     shellPath = shellPath.replace('//', '/')
+    sendLog('上传脚本')
     await SSH.putFiles([{ local: localPath, remote: shellPath }])
     // 设置脚本文件执行权限
     await SSH.exec('chmod', ['777', shellPath])
@@ -212,6 +315,7 @@ const runRemoteShell = async(localPath, remotePath) => {
     try {
         res = await runCommand('./' + shellName, remotePath )
     }catch (e) {
+        sendLog('执行远程脚本失败' + (e.message || e))
         console.log(e)
     }
 
@@ -223,6 +327,7 @@ const runRemoteShell = async(localPath, remotePath) => {
 
     // 断开连接
     await SSH.dispose()
+    sendLog('执行远程脚本成功')
     return '执行远程脚本成功<br>' + res
 }
 
@@ -258,8 +363,9 @@ const copyDist = async(project) => {
     }
     return errorMsg
 }
-
+let errorMsg = ''
 async function deploy(project) {
+    clearLog('开始部署')
     const projectPath = project.localPath || project.name
     console.log('开始部署...', storagePath, projectPath)
     let isExists = await getStat(path.resolve(storagePath, projectPath));
@@ -268,23 +374,22 @@ async function deploy(project) {
         console.log('项目路径不存在！')
         return Promise.reject('项目路径不存在！')
     }
-    let errorMsg = ''
     let finished = false
     try {
         console.log('路径=>', path.resolve(storagePath, projectPath))
         // shell.cd(path.resolve(deployRootPath, './' + project.name))
-        errorMsg += await shell.exec('git checkout .', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+        errorMsg += await runLocalShellCommand('git checkout .', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
         await isError(errorMsg)
         errorMsg += 'git还原完成<br>'
-        errorMsg += await shell.exec('git pull', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+        errorMsg += await runLocalShellCommand('git pull', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
         if (project.eventType === 'push') {
-            errorMsg += await shell.exec('git checkout ' + project.branch, {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+            errorMsg += await runLocalShellCommand('git checkout ' + project.branch, {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
         } else {
-            errorMsg += await shell.exec('git checkout tags/' + project.tagName, {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+            errorMsg += await runLocalShellCommand('git checkout tags/' + project.tagName, {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
         }
         await isError(errorMsg)
         errorMsg += 'git切换分支完成<br>'
-        errorMsg += await shell.exec('git pull', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+        errorMsg += await runLocalShellCommand('git pull', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
         await isError(errorMsg)
         errorMsg += 'git拉取完成<br>'
         // try {
@@ -309,14 +414,21 @@ async function deploy(project) {
             // }
             //
             // // 清空npm缓存
-            // await shell.exec('npm cache clean --force', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+            // await runLocalShellCommand('npm cache clean --force', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
 
             console.log('开始执行npm命令')
             // 若有打包命令则执行，否则默认npm run build:stage
-            errorMsg += await shell.exec('npm install', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+            // 判断打包命令使用的是npm还是yarn还是pnpm
+            if (project.build.indexOf('yarn') !== -1) {
+                errorMsg += await runLocalShellCommand('yarn install', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
+            } else if (project.build.indexOf('pnpm') !== -1) {
+                errorMsg += await runLocalShellCommand('pnpm install', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
+            } else {
+              errorMsg += await runLocalShellCommand('npm install', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
+            }
             await isError(errorMsg)
             errorMsg += 'npm install完成<br>'
-            errorMsg += await shell.exec(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, projectPath)}).stderr + '<br>'
+            errorMsg += await runLocalShellCommand(project.build ? project.build : 'npm run build:stage', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
             await isError(errorMsg)
             errorMsg += '打包完成<br>'
             await sleep(500)
@@ -367,6 +479,26 @@ async function deploy(project) {
     } catch (e) {
         errorMsg += e || '未知错误'
     }
+    // 计算耗时, 如果超过60秒转为MM分ss秒
+    let executionTime = Date.now() - startTime
+    if (executionTime > 60000) {
+        executionTime = Math.round(executionTime / 60000) + '分' + Math.round((executionTime % 60000) / 1000) + '秒'
+    } else {
+        executionTime = Math.round(executionTime / 1000) + '秒'
+    }
+    console.log('部署完成，耗时=>', executionTime)
+    const options = {
+        timeZone: 'Asia/Shanghai', // 亚洲/上海时区即东八区
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false // 使用24小时制
+    };
+
+    errorMsg += '<br>耗时=>' + executionTime + '<br>结束时间=>' + new Date().toLocaleString('zh-CN', options)
     let onlinePath = project.path
     onlinePath = onlinePath.replace('///', '/')
     onlinePath = onlinePath.replace('//', '/')
@@ -383,18 +515,27 @@ async function deploy(project) {
             branch: project.branch,
             tagName: project.tagName,
             eventType: project.eventType,
-            ip: project.ip,
+            ip: project.ip || '本地',
             path: onlinePath,
             log: errorMsg,
-            success: finished
+            success: finished,
+            triggerBy: project.triggerBy || ''
         }
     }, function(error, response, body) {
         if (!error && response.statusCode == 200) {
             console.log(body) // 请求成功的处理逻辑
         }
+        // 向父线程发送结束消息
+        setTimeout(function () {
+            parentPort.postMessage({
+                type: 'finish'
+            })
+        }, 2000)
     });
     // 发送微信通知
-    sendWxNotice(project, finished)
+    // sendWxNotice(project, finished)
+    // 推送机器人消息
+    sendRobotMessage(project, finished)
 }
 
 function isDockerEnvironment() {
@@ -403,41 +544,96 @@ function isDockerEnvironment() {
 
 const runDeploy = (data) => {
     if (isMainThread) {
-        console.log('启动新线程')
-        const worker = new Worker(__filename, {
-            // workerData: JSON.parse(JSON.stringify(data._doc))
-            workerData: data
-        });
-        worker.on('message', (d) => {
-            console.log('parent receive message:', d);
-        });
-        worker.on('error', (e) => {
-            console.error('parent receive error', e);
-        });
-        worker.on('exit', (code) => {
-            if (timer) {
-                clearTimeout(timer)
+        return new Promise(async (resolve, reject) => {
+            // 以项目id作为任务号
+            const projectId = data._id
+            if (global.activeWorkers[projectId]) {
+                try {
+                    console.log('正在运行中，终止旧线程')
+                    const runningWorker = global.activeWorkers[projectId]
+                    runningWorker.postMessage({
+                        type: 'stop'
+                    })
+                    await runningWorker.terminate()
+                    console.log('已终止')
+                } catch (e) {
+                    console.log('终止旧线程失败', e)
+                }
             }
-            if (code !== 0) {
-                console.error(`工作线程使用退出码 ${code} 停止`);
-            } else {
-                console.log('工作线程正常退出')
-            }
-            // docker内重启，解决ssh第二次连接异常退出的问题
-            const isDocker = isDockerEnvironment()
-            // console.log('isDocker', isDocker)
-            if (isDocker) {
-                // process.exit(0);
-            }
-        });
-        // 超时自动停止
-        const timer = setTimeout(() => {
-            worker.terminate()
-        }, 10 * 60 * 1000)
+            console.log('启动新线程')
+            // 从mongo中查找robot
+            const robotInfo = await robot.findOne({})
+            const worker = new Worker(__filename, {
+                // workerData: JSON.parse(JSON.stringify(data._doc))
+                workerData: {...data, robotInfo: robotInfo.toJSON()}
+            });
+            global.activeWorkers[projectId] = worker
+            worker.on('message', (d) => {
+                // console.log('parent receive message:', d);
+                if (d.type === 'finish') {
+                    console.log('子线程运行完毕，正常退出')
+                    worker.terminate()
+                    delete global.activeWorkers[projectId]
+                    global.runWork = null
+                    runTask()
+                    resolve()
+                } else if(d.type === 'log') {
+                    global.sseClients.forEach(client => {
+                        client.write(`data: ${JSON.stringify({ log: d.logContent, type: 'log' })}\n\n`);
+                        sendTaskList(client)
+                    });
+                } else if(d.type === 'clearLog') {
+                    global.sseClients.forEach(client => {
+                        client.write(`data: ${JSON.stringify({ log: d.logContent, type: 'clearLog' })}\n\n`);
+                    });
+                }
+            });
+            worker.on('error', (e) => {
+                console.error('parent receive error', e);
+            });
+            worker.on('exit', (code) => {
+                if (timer) {
+                    clearTimeout(timer)
+                }
+                if (code !== 0) {
+                    console.error(`工作线程使用退出码 ${code} 停止`);
+                } else {
+                    console.log('工作线程正常退出')
+                }
+                delete global.activeWorkers[projectId]
+                if (global.runWork && global.runWork._id === projectId) {
+                    global.runWork = null
+                    console.log('清空')
+                }
+                runTask()
+                // docker内重启，解决ssh第二次连接异常退出的问题
+                const isDocker = isDockerEnvironment()
+                // console.log('isDocker', isDocker)
+                if (isDocker) {
+                    // process.exit(0);
+                }
+                resolve()
+            });
+            // 超时自动停止
+            const timer = setTimeout(() => {
+                console.log('超时自动停止')
+                worker.terminate()
+            }, 30 * 60 * 1000)
+        })
     }
 }
 if (!isMainThread) {
     deploy(workerData)
+    parentPort.on('message', (data) => {
+        console.log('child receive message:', data);
+        if (data.type === 'stop') {
+            console.log('收到停止指令');
+            childProcess.kill(); // 终止子进程
+            process.exit();      // 退出Worker线程
+        } if (data.type === 'initLog') {
+            clearLog(errorMsg)
+        }
+    })
 }
 
 module.exports = runDeploy;

@@ -1,5 +1,11 @@
 const request = require("request");
-const sendWxNotice = (project, finished) => {
+
+const sendRobotMessage = async (project, finished) => {
+  console.log('sendRobotMessage', project.robotInfo, project.robotInfo.webhook)
+  if (!project.robotInfo || !project.robotInfo.webhook) {
+    return
+  }
+  const webhook = project.robotInfo.webhook
   // name, type, branch, tag, server
   const content = `##### 项目：${project.name}
 ##### 结果：${finished ? '成功' : '失败'}
@@ -8,22 +14,27 @@ const sendWxNotice = (project, finished) => {
 ##### 部署路径 ${project.path}
 ###### 详细内容请查看日志`
   request({
-    url: 'https://xizhi.qqoq.net/XZ636e3c1c8c932063583342c1520cb70a.channel',
+    url: webhook,
     method: "POST",
     json: true,
     headers: {
       "content-type": "application/json",
     },
     body: {
-      title: `${project.name}部署通知`,
-      content: content
+      msgtype: 'markdown',
+      markdown: {
+        title: `${project.name}部署通知`,
+        content: content,
+        text: content
+      }
     }
-  }, function(error, response, body) {
+  }, function (error, response, body) {
     if (!error && response.statusCode == 200) {
-      console.log('推送成功') // 请求成功的处理逻辑
+      console.log('推送机器人成功') // 请求成功的处理逻辑
+      console.log(response.body)
     } else {
-      console.log('推送失败')
-      if(error) {
+      console.log('推送机器人失败')
+      if (error) {
         console.log(error)
       } else {
         console.log(response)
@@ -32,4 +43,4 @@ const sendWxNotice = (project, finished) => {
   });
 }
 
-module.exports = sendWxNotice;
+module.exports = sendRobotMessage;

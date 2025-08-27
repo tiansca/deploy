@@ -22,10 +22,16 @@ var recordSchema = new Schema({
     success: {
         type: Boolean,
         default: true
+    },
+    triggerBy: {
+        type: String,
+        default: ''
     }
 }, {
     versionKey: false,
     timestamps: { createdAt: 'createTime', updatedAt: 'updateTime' }
 })
+
+recordSchema.index({ project_id: 1 });
 
 module.exports = mongoose.model('record', recordSchema);

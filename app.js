@@ -11,6 +11,7 @@ var usersRouter = require('./routes/users');
 var app = express();
 var bodyParser = require('body-parser')
 const {exec} = require("child_process");
+const addAdmin = require("./utils/addAdmin");
 app.use(bodyParser.json());
 
 app.use(bodyParser.urlencoded({ extended: false}));
@@ -78,5 +79,22 @@ async function runCopySSH() {
 }
 
 runCopySSH()
+
+// 记录当前运行的子线程任务
+global.activeWorkers = {}
+//等待队列和运行任务
+global.waitQueue = []
+global.runWork = null
+// sse客户端集合
+global.sseClients = new Set()
+console.log(global.sseClients)
+
+// 插入admin用户
+try {
+  addAdmin()
+} catch (e) {
+  console.log(e)
+}
+
 
 module.exports = app;
