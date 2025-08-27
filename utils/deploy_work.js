@@ -227,7 +227,7 @@ function getStat(path){
 
 const isError = (str) => {
     // console.log('msg', str)
-    if (str.indexOf('err') !== -1 || str.indexOf('ERR') !== -1 || str.indexOf('killed') !== -1 || str.indexOf('Killed') !== -1) {
+    if (str.indexOf('err ') !== -1 || str.indexOf('ERR ') !== -1 || str.indexOf('err:') !== -1 || str.indexOf('ERR:') !== -1 || str.indexOf('error') !== -1 || str.indexOf('Error') !== -1 || str.indexOf('killed') !== -1 || str.indexOf('Killed') !== -1) {
         return Promise.reject('错误，终止')
     } else {
         return Promise.resolve('')
