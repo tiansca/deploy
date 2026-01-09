@@ -1,0 +1,88 @@
+# ===================== 核心Node.js相关（必选） =====================
+# 本地安装的依赖（容器内重新安装，避免系统兼容问题）
+node_modules/
+# npm/yarn/pnpm的缓存/日志文件
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json.bak
+yarn.lock.bak
+
+# ===================== 版本控制相关 =====================
+# Git版本控制文件（无需进入镜像）
+.git/
+.gitignore
+.gitattributes
+.gitmodules
+
+# ===================== 操作系统相关 =====================
+# macOS系统文件
+.DS_Store
+# Windows系统文件
+Thumbs.db
+# Linux临时文件
+*.swp
+*.swo
+
+# ===================== 前端项目相关 =====================
+# 前端构建产物（若镜像内需要构建则注释，若已本地构建需复制则保留）
+dist/
+build/
+out/
+# 前端包管理器缓存
+.npm/
+.yarn/
+.pnpm-store/
+# 前端开发缓存
+.eslintcache
+.vite/
+webpack.stats.json
+# 前端测试相关
+coverage/
+test-results/
+
+# ===================== 后端项目相关 =====================
+# 日志文件（避免本地日志污染镜像）
+logs/
+*.log
+# 临时文件目录
+tmp/
+temp/
+# 本地上传的临时文件（持久化上传文件建议挂载卷，而非复制到镜像）
+uploads/
+# 后端进程文件
+*.pid
+*.seed
+
+# ===================== 开发工具/编辑器相关 =====================
+# VSCode配置
+.vscode/
+# JetBrains系列编辑器（WebStorm/IDEA等）
+.idea/
+*.iml
+# 其他编辑器缓存
+.svn/
+.hg/
+
+# ===================== 环境配置（按需调整） =====================
+# 本地环境变量文件（若镜像需要特定.env文件，可删除对应行或保留需要的，如.env.prod）
+.env
+.env.local
+.env.development
+.env.test
+# Docker相关（避免循环复制）
+.dockerignore
+Dockerfile
+docker-compose*.yml
+
+# ===================== 其他无用文件 =====================
+# 压缩包/备份文件
+*.zip
+*.tar.gz
+*.bak
+*.tmp
+# 文档类文件（非运行必需）
+README.md
+CHANGELOG.md
+docs/

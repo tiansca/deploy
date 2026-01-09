@@ -19,6 +19,7 @@ const stripAnsi = require('strip-ansi');
 const sendRobotMessage = require("./sendRobotMessage");
 const robot = require("../model/robot");
 const smb2 = require("v9u-smb2");
+const os = require('os');
 // let mongoose=require('mongoose');
 shell.config.execEncoding = 'utf8';
 // 记录shell子进程
@@ -397,7 +398,7 @@ function getStat(path){
 
 const isError = (str) => {
     // console.log('msg', str)
-    if (str.indexOf('err') !== -1 || str.indexOf('ERR') !== -1 || str.indexOf('killed') !== -1 || str.indexOf('Killed') !== -1) {
+  if (str.indexOf('err ') !== -1 || str.indexOf('ERR ') !== -1 || str.indexOf('err:') !== -1 || str.indexOf('ERR:') !== -1 || str.indexOf('error ') !== -1 || str.indexOf('Error ') !== -1 || str.indexOf('killed ') !== -1 || str.indexOf('Killed ') !== -1) {
         return Promise.reject('错误，终止')
     } else {
         return Promise.resolve('')
@@ -534,6 +535,12 @@ const copyDist = async(project) => {
     return errorMsg
 }
 let errorMsg = ''
+
+// 封装判断Windows环境的函数
+function isWindowsEnvironment() {
+    // 核心判断逻辑：返回值为win32则是Windows
+    return os.platform() === 'win32';
+}
 async function deploy(project) {
     clearLog('开始部署')
     const projectPath = project.localPath || project.name
@@ -551,7 +558,11 @@ async function deploy(project) {
         errorMsg += await runLocalShellCommand('git checkout .', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
         await isError(errorMsg)
         errorMsg += 'git还原完成<br>'
-        errorMsg += await runLocalShellCommand('git pull', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
+        let pullScript = 'GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no" git pull'
+        if (isWindowsEnvironment()) {
+            pullScript = 'git pull'
+        }
+        errorMsg += await runLocalShellCommand(pullScript, {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
         if (project.eventType === 'push') {
             errorMsg += await runLocalShellCommand('git checkout ' + project.branch, {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
         } else {
@@ -559,7 +570,7 @@ async function deploy(project) {
         }
         await isError(errorMsg)
         errorMsg += 'git切换分支完成<br>'
-        errorMsg += await runLocalShellCommand('git pull', {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
+        errorMsg += await runLocalShellCommand(pullScript, {cwd: path.resolve(storagePath, projectPath)}) + '<br>'
         await isError(errorMsg)
         errorMsg += 'git拉取完成<br>'
         // try {
@@ -641,7 +652,7 @@ async function deploy(project) {
                 await isError(errorMsg)
                 errorMsg += '上传服务器成功<br>'
                 // 执行启动脚本
-                if (project.startShell) {
+                if (project.startShell && project.protocol === 'ssh') {
                     // 获取shell内容
                     // const content = await readShell(getFullPath(project['startShell'], 'shell'))
                     // if (content) {
@@ -652,6 +663,21 @@ async function deploy(project) {
             } else {
                 const copyRes = await copyDist(project)
                 errorMsg += copyRes
+            }
+            // 判断有没有api回调
+            if (project.apiCallback) {
+                sendLog('执行api回调: ' + project.apiCallback)
+                try {
+                    const res = await requestApi({url: project.apiCallback, method: 'get', qs: project})
+                    let resData = res.data || res
+                    if (typeof resData === 'object') {
+                        resData = JSON.stringify(resData)
+                    }
+                    errorMsg += resData
+                } catch (e) {
+                    sendLog('api回调失败: ' + e)
+                    errorMsg += e
+                }
             }
             finished = true
         }
@@ -667,6 +693,7 @@ async function deploy(project) {
         executionTime = Math.round(executionTime / 1000) + '秒'
     }
     console.log('部署完成，耗时=>', executionTime)
+    sendLog('部署完成，耗时=>' + executionTime)
     const options = {
         timeZone: 'Asia/Shanghai', // 亚洲/上海时区即东八区
         year: 'numeric',
@@ -716,6 +743,22 @@ async function deploy(project) {
     // sendWxNotice(project, finished)
     // 推送机器人消息
     sendRobotMessage(project, finished)
+}
+
+// 发送url请求，并返回结果
+async function requestApi(options) {
+    return new Promise((resolve, reject) => {
+        request(options, function (error, response, body) {
+            if (error || response.statusCode >= 400) {
+                sendLog('请求失败')
+                sendLog(error || body || response)
+                reject(error || body || response)
+            } else {
+                sendLog(body)
+                resolve(body)
+            }
+        });
+    })
 }
 
 function isDockerEnvironment() {

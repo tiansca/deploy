@@ -100,7 +100,8 @@ router.post('/add_project', function(req, res, next) {
     eventType: req.body.eventType || 'push',
     buildShell: req.body.buildShell,
     startShell: req.body.startShell,
-    tagPrefixes: req.body.tagPrefixes || ''
+    tagPrefixes: req.body.tagPrefixes || '',
+    apiCallback: req.body.apiCallback || '',
   };
   // 判断本地目录是否被占用
   let searchParams = {$or: [{ localPath: '',  name: postData.outputDir}, { localPath: postData.localPath }]}
@@ -291,7 +292,8 @@ router.post('/update', function(req, res, next) {
     eventType: req.body.eventType,
     buildShell: req.body.buildShell,
     startShell: req.body.startShell,
-    tagPrefixes: req.body.tagPrefixes
+    tagPrefixes: req.body.tagPrefixes,
+    apiCallback: req.body.apiCallback || '',
   };
   project.findOne({_id:postData._id},function (err, data) {
     if(err || !data){
@@ -325,18 +327,18 @@ router.post('/update', function(req, res, next) {
 router.get('/remove', function(req, res, next) {
   const id = req.query.id
   if (id) {
-    project.findByIdAndRemove(req.query.id,function (err,data) {
-      if(err){
-        res.send({code:1,msg:'删除失败'})
-      }else {
-        res.send({code:0,msg:"删除成功"})
-        console.log(data.name)
-        try {
-          rmdirPromise(path.resolve(storagePath, './' + data.localPath))
-        } catch (e) {
-          console.log(e)
+    project.findByIdAndRemove(req.query.id,async function (err, data) {
+        if (err) {
+            res.send({code: 1, msg: '删除失败'})
+        } else {
+            res.send({code: 0, msg: "删除成功"})
+            console.log(data.name)
+            try {
+                await rmdirPromise(path.resolve(storagePath, './' + data.localPath))
+            } catch (e) {
+                console.log(e)
+            }
         }
-      }
     })
   } else {
     res.send({code: -1, msg: '缺少id'})

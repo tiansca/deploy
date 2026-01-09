@@ -26,7 +26,8 @@ var projectSchema = new Schema({
     buildShell: String, // 构建脚本
     eventType: String, // 响应git事件类型，push,tag
     tagPrefixes: String, // tag前缀，为空所有tag都响应
-    startShell: String // 启动脚本
+    startShell: String, // 启动脚本
+    apiCallback: String // api回调
 }, {
     versionKey: false,
     timestamps: { createdAt: 'createTime', updatedAt: 'updateTime' }
