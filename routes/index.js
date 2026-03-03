@@ -87,6 +87,10 @@ router.get('/', function(req, res, next) {
   res.send('test')
 });
 router.post('/add_project', function(req, res, next) {
+  let userid = req.headers['userid']
+  if (userid) {
+    userid = Number(userid)
+  }
   var postData = {
     name: req.body.name,
     url: req.body.url,
@@ -102,6 +106,9 @@ router.post('/add_project', function(req, res, next) {
     startShell: req.body.startShell,
     tagPrefixes: req.body.tagPrefixes || '',
     apiCallback: req.body.apiCallback || '',
+    creator: userid || 0,
+    isShare: req.body.isShare || false,
+    owner: req.body.owner || {isShare: false},
   };
   // 判断本地目录是否被占用
   let searchParams = {$or: [{ localPath: '',  name: postData.outputDir}, { localPath: postData.localPath }]}
@@ -220,7 +227,32 @@ router.post('/deploy', function(req, res, next) {
   })
 });
 router.get('/list', function(req, res, next) {
-  project.find({},function (err,data) {
+  // 获取header里的userid
+  var userId = req.headers['userid']
+  if (userId) {
+    userId = Number(userId)
+  }
+  // 查找creator为当前用户的项目,或者isShare为true,owner.range为all,或者owner.userIds包含当前用户的项目
+  console.log('userId', userId)
+  project.find({
+    $or: [
+      // 条件1：当前用户是创建者
+      { creator: userId },
+      // 条件2：项目已分享，且满足以下任一子条件
+      {
+        isShare: true,
+        $or: [
+          // 子条件1：分享范围为所有人
+          { "owner.range": "all" },
+          // 子条件2：分享范围为部分用户，且当前用户在分享列表中
+          {
+            "owner.range": "part",
+            "owner.userIds": { $in: [userId] }
+          }
+        ]
+      }
+    ]
+  }, function (err,data) {
     if(err){
       res.send({data:1,msg:'查询失败'})
     }else {
@@ -294,6 +326,8 @@ router.post('/update', function(req, res, next) {
     startShell: req.body.startShell,
     tagPrefixes: req.body.tagPrefixes,
     apiCallback: req.body.apiCallback || '',
+    isShare: req.body.isShare || false,
+    owner: req.body.owner || {isShare: false},
   };
   project.findOne({_id:postData._id},function (err, data) {
     if(err || !data){
@@ -735,6 +769,53 @@ router.get('/get_webhook', async (req, res) => {
     res.send({
       code: -1,
       msg: '查询失败',
+      error: e
+    });
+  }
+})
+
+// 更新所有projects的isShare,owner,creator字段
+router.get('/update_projects_share', async (req, res) => {
+  try {
+    let userId = req.headers['userid']
+    if (userId) {
+      userId = Number(userId)
+    }
+    // ① 更新缺失isShare的文档
+    const updateIsShare = await project.updateMany(
+      { isShare: { $exists: false } }, // 查询条件：isShare字段不存在
+      { $set: { isShare: true } }      // 设置默认值
+    );
+    console.log(`补充isShare字段：更新了 ${updateIsShare.nModified} 条文档`);
+
+    // ② 更新缺失owner.range的文档
+    const updateOwnerRange = await project.updateMany(
+      { "owner": { $exists: false } }, // 嵌套字段的查询方式
+      { $set: { "owner.range": "all", "owner.userIds": [] } }
+    );
+    console.log(`补充owner.range字段：更新了 ${updateOwnerRange.nModified} 条文档`);
+
+    // ④ 更新缺失creator的文档
+    let updateCreator;
+    if (userId) {
+      updateCreator = await project.updateMany(
+        { creator: { $exists: false } },
+        { $set: { creator: userId } } // 这里替换为你实际的默认值（如系统管理员ID）
+      );
+    } else {
+      console.log('缺少userId')
+    }
+    console.log(`补充creator字段：更新了 ${updateCreator.nModified} 条文档`);
+
+    console.log('所有缺失字段补充完成！');
+    res.send({
+      code: 0,
+      msg: `更新成功: 补充owner.range字段：更新了 ${updateOwnerRange.nModified} 条文档;补充isShare字段：更新了 ${updateIsShare.nModified} 条文档;补充creator字段：更新了 ${updateCreator.nModified} 条文档`,
+    });
+  } catch (e) {
+    res.send({
+      code: -1,
+      msg: '更新失败',
       error: e
     });
   }

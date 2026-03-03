@@ -60,8 +60,8 @@ function runTask () {
 
 }
 // 发送日志
-const sendLog = (logContent) => {
-    parentPort.postMessage({type: 'log', logContent:logContent + '<br/>'})
+const sendLog = (logContent, breakLine = true) => {
+    parentPort.postMessage({type: 'log', logContent:logContent + (breakLine ? '<br/>' : '')})
 }
 
 const clearLog = (logContent) => {
@@ -437,13 +437,13 @@ async function runLocalShellCommand(command, options) {
             /* ... do something with data ... */
             // console.log(data)
             res += stripAnsi(data)
-            sendLog(stripAnsi(data))
+            sendLog(stripAnsi(data), false)
         });
         // 错误输出
         childProcess.stderr.on('data', (data) => {
           const cleaned = stripAnsi(data)
           stderrData += cleaned
-          sendLog(stderrData)  // 错误日志建议用不同标识，例如sendErrorLog
+          sendLog(stderrData, false)  // 错误日志建议用不同标识，例如sendErrorLog
         })
 
         // 监听错误事件
