@@ -1,5 +1,5 @@
 # 使用Node.js官方镜像作为基础镜像（基于Debian 12 Bookworm）
-FROM node:22.1.0
+FROM node:22.22.2
 
 # 设置环境变量
 ENV DOCKER yes
